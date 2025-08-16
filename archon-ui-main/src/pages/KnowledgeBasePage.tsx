@@ -1,16 +1,14 @@
-import { useEffect, useState, useRef, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Search, Grid, Plus, Upload, Link as LinkIcon, Brain, Filter, BoxIcon, List, BookOpen, CheckSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { Select } from '../components/ui/Select';
 import { Badge } from '../components/ui/Badge';
 import { GlassCrawlDepthSelector } from '../components/ui/GlassCrawlDepthSelector';
 import { useStaggeredEntrance } from '../hooks/useStaggeredEntrance';
 import { useToast } from '../contexts/ToastContext';
 import { knowledgeBaseService, KnowledgeItem, KnowledgeItemMetadata } from '../services/knowledgeBaseService';
-import { knowledgeSocketIO } from '../services/socketIOService';
 import { CrawlingProgressCard } from '../components/knowledge-base/CrawlingProgressCard';
 import { CrawlProgressData, crawlProgressService } from '../services/crawlProgressService';
 import { WebSocketState } from '../services/socketIOService';
@@ -19,27 +17,6 @@ import { KnowledgeItemCard } from '../components/knowledge-base/KnowledgeItemCar
 import { GroupedKnowledgeItemCard } from '../components/knowledge-base/GroupedKnowledgeItemCard';
 import { KnowledgeGridSkeleton, KnowledgeTableSkeleton } from '../components/knowledge-base/KnowledgeItemSkeleton';
 import { GroupCreationModal } from '../components/knowledge-base/GroupCreationModal';
-
-const extractDomain = (url: string): string => {
-  try {
-    const urlObj = new URL(url);
-    const hostname = urlObj.hostname;
-    
-    // Remove 'www.' prefix if present
-    const withoutWww = hostname.startsWith('www.') ? hostname.slice(4) : hostname;
-    
-    // For domains with subdomains, extract the main domain (last 2 parts)
-    const parts = withoutWww.split('.');
-    if (parts.length > 2) {
-      // Return the main domain (last 2 parts: domain.tld)
-      return parts.slice(-2).join('.');
-    }
-    
-    return withoutWww;
-  } catch {
-    return url; // Return original if URL parsing fails
-  }
-};
 
 interface GroupedKnowledgeItem {
   id: string;
@@ -108,8 +85,8 @@ export const KnowledgeBasePage = () => {
     
     return () => {
       console.log('🧹 KnowledgeBasePage: Cleaning up');
-      // Cleanup all crawl progress connections on unmount
-      crawlProgressService.disconnect();
+      // Stop all active streams but don't disconnect the shared service
+      crawlProgressService.stopAllStreams();
     };
   }, []); // Only run once on mount
 
@@ -267,7 +244,7 @@ export const KnowledgeBasePage = () => {
             items: [item],
             metadata: {
               ...item.metadata,
-              source_type: 'group',
+              source_type: 'url',
               chunks_count: item.metadata.chunks_count || 0,
               word_count: item.metadata.word_count || 0,
             },
@@ -417,34 +394,31 @@ export const KnowledgeBasePage = () => {
       const response = await knowledgeBaseService.refreshKnowledgeItem(sourceId);
       console.log('🔄 Refresh response:', response);
       
-      if (response.progressId) {
+      if ((response as any).progressId) {
         // Add progress tracking
         const progressData: CrawlProgressData = {
-          progressId: response.progressId,
+          progressId: (response as any).progressId,
           currentUrl: item.url,
           totalPages: 0,
           processedPages: 0,
           percentage: 0,
           status: 'starting',
-          message: 'Starting refresh...',
           logs: ['Starting refresh for ' + item.url],
-          crawlType: 'refresh',
-          currentStep: 'starting',
-          startTime: new Date()
+          currentStep: 'starting'
         };
         
         setProgressItems(prev => [...prev, progressData]);
         
         // Store in localStorage for persistence
         try {
-          localStorage.setItem(`crawl_progress_${response.progressId}`, JSON.stringify({
+          localStorage.setItem(`crawl_progress_${(response as any).progressId}`, JSON.stringify({
             ...progressData,
             startedAt: Date.now()
           }));
           
           const activeCrawls = JSON.parse(localStorage.getItem('active_crawls') || '[]');
-          if (!activeCrawls.includes(response.progressId)) {
-            activeCrawls.push(response.progressId);
+          if (!activeCrawls.includes((response as any).progressId)) {
+            activeCrawls.push((response as any).progressId);
             localStorage.setItem('active_crawls', JSON.stringify(activeCrawls));
           }
         } catch (error) {
@@ -455,28 +429,28 @@ export const KnowledgeBasePage = () => {
         setKnowledgeItems(prev => prev.filter(k => k.source_id !== sourceId));
         
         // Connect to crawl progress WebSocket
-        await crawlProgressService.streamProgressEnhanced(response.progressId, {
+        await crawlProgressService.streamProgressEnhanced((response as any).progressId, {
           onMessage: (data: CrawlProgressData) => {
             console.log('🔄 Refresh progress update:', data);
             if (data.status === 'completed') {
               handleProgressComplete(data);
             } else if (data.error || data.status === 'error') {
-              handleProgressError(data.error || 'Refresh failed', response.progressId);
+              handleProgressError(data.error || 'Refresh failed', (response as any).progressId);
             } else if (data.status === 'cancelled' || data.status === 'stopped') {
               // Handle cancelled/stopped status
               handleProgressUpdate({ ...data, status: 'cancelled' });
               setTimeout(() => {
-                setProgressItems(prev => prev.filter(item => item.progressId !== response.progressId));
+                setProgressItems(prev => prev.filter(item => item.progressId !== (response as any).progressId));
                 // Clean up from localStorage
                 try {
-                  localStorage.removeItem(`crawl_progress_${response.progressId}`);
+                  localStorage.removeItem(`crawl_progress_${(response as any).progressId}`);
                   const activeCrawls = JSON.parse(localStorage.getItem('active_crawls') || '[]');
-                  const updated = activeCrawls.filter((id: string) => id !== response.progressId);
+                  const updated = activeCrawls.filter((id: string) => id !== (response as any).progressId);
                   localStorage.setItem('active_crawls', JSON.stringify(updated));
                 } catch (error) {
                   console.error('Failed to clean up cancelled crawl:', error);
                 }
-                crawlProgressService.stopStreaming(response.progressId);
+                crawlProgressService.stopStreaming((response as any).progressId);
               }, 2000); // Show cancelled status for 2 seconds before removing
             } else {
               handleProgressUpdate(data);
@@ -689,7 +663,7 @@ export const KnowledgeBasePage = () => {
           formData.append('tags', JSON.stringify(progressItem.originalUploadParams.tags));
         }
         
-        const result = await knowledgeBaseService.uploadDocument(formData);
+        const result = await knowledgeBaseService.uploadDocument(formData as any);
         
         if ((result as any).progressId) {
           // Start progress tracking with original parameters preserved
@@ -752,8 +726,8 @@ export const KnowledgeBasePage = () => {
         localStorage.setItem(`crawl_progress_${progressId}`, JSON.stringify(crawlData));
       }
       
-      // Call stop endpoint
-      await knowledgeBaseService.stopCrawl(progressId);
+        // Call stop endpoint
+        const response = await knowledgeBaseService.stopCrawl(progressId);
       
       // Update UI state
       setProgressItems(prev => prev.map(item => 
@@ -963,7 +937,7 @@ export const KnowledgeBasePage = () => {
                     onClick={deselectAll}
                     variant="ghost"
                     size="sm"
-                    accentColor="gray"
+                    accentColor="blue"
                   >
                     Clear Selection
                   </Button>
@@ -1081,7 +1055,7 @@ export const KnowledgeBasePage = () => {
                   // Original layout when no progress items or in list view
                   <div className={`grid ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4' : 'grid-cols-1 gap-3'}`}>
                     {/* Progress Items (only in list view) */}
-                    {viewMode === 'list' && progressItems.map(progressData => (
+                    {viewMode !== 'grid' && progressItems.map(progressData => (
                       <motion.div key={progressData.progressId} variants={contentItemVariants}>
                         <CrawlingProgressCard 
                           progressData={progressData}
@@ -1355,11 +1329,11 @@ const AddKnowledgeModal = ({
           tags
         });
         
-        if (result.success && result.progressId) {
+        if ((result as any).success && (result as any).progressId) {
           // Upload started with progressId
           
           // Start progress tracking for upload
-          onStartCrawl(result.progressId, {
+          onStartCrawl((result as any).progressId, {
             currentUrl: `file://${selectedFile.name}`,
             percentage: 0,
             status: 'starting',
@@ -1540,4 +1514,3 @@ const AddKnowledgeModal = ({
       </Card>
     </div>;
 };
-

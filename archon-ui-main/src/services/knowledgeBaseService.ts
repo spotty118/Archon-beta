@@ -101,8 +101,10 @@ async function apiRequest<T>(
       ...options.headers
     };
     
-    // Add CSRF token for POST, PUT, DELETE, PATCH requests
-    if (options.method && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(options.method.toUpperCase())) {
+    // Skip CSRF token for knowledge-items endpoints since they're not CSRF protected
+    // Only add CSRF token for other endpoints that require it
+    const isKnowledgeEndpoint = endpoint.includes('/knowledge-items');
+    if (!isKnowledgeEndpoint && options.method && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(options.method.toUpperCase())) {
       try {
         const csrfHeaders = await csrfService.getHeaders();
         headers = { ...headers, ...csrfHeaders };
@@ -111,6 +113,8 @@ async function apiRequest<T>(
         console.error(`❌ [KnowledgeBase] Failed to get CSRF token:`, csrfError);
         // Continue without CSRF token for now, but log the error
       }
+    } else if (isKnowledgeEndpoint) {
+      console.log(`✅ [KnowledgeBase] Skipping CSRF token for knowledge-items endpoint: ${endpoint}`);
     }
     
     const response = await fetch(url, {

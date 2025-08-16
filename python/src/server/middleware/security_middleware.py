@@ -61,8 +61,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         # Endpoints that require CSRF protection
         self.csrf_protected_endpoints = {
             "/api/projects",
-            "/api/tasks", 
-            "/api/knowledge",
+            "/api/tasks",
             "/api/documents",
             "/api/auth/logout",
         }
