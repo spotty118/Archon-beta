@@ -157,9 +157,13 @@ export class WebSocketService {
         reconnectionAttempts: this.config.maxReconnectAttempts,
         reconnectionDelay: this.config.reconnectInterval,
         reconnectionDelayMax: 30000,
-        timeout: 10000,
+        timeout: 15000, // Increased timeout for remote connections
         transports: ['websocket', 'polling'],
         path: socketPath,
+        forceNew: false, // Allow connection reuse
+        autoConnect: true,
+        upgrade: true,
+        rememberUpgrade: true,
         query: {
           session_id: this.sessionId
         }
