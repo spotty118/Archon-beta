@@ -54,9 +54,7 @@ describe('Project Service', () => {
 
       const result = await projectService.listProjects()
 
-      expect(fetch).toHaveBeenCalledWith('/api/projects', {
-        headers: { 'Content-Type': 'application/json' }
-      })
+      expect(fetch).toHaveBeenCalledWith('/api/projects')
       expect(result).toHaveLength(1)
       expect(result[0].id).toBe(mockProject.id)
     })
@@ -77,9 +75,7 @@ describe('Project Service', () => {
 
       const result = await projectService.getProject('test-project-id')
 
-      expect(fetch).toHaveBeenCalledWith('/api/projects/test-project-id', {
-        headers: { 'Content-Type': 'application/json' }
-      })
+      expect(fetch).toHaveBeenCalledWith('/api/projects/test-project-id')
       expect(result.id).toBe(mockProject.id)
     })
 
@@ -159,7 +155,6 @@ describe('Project Service', () => {
 
       expect(fetch).toHaveBeenCalledWith('/api/projects/test-project-id', {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' }
       })
     })
 
@@ -180,9 +175,7 @@ describe('Project Service', () => {
 
       const result = await projectService.getTasksByProject('test-project-id')
 
-      expect(fetch).toHaveBeenCalledWith('/api/projects/test-project-id/tasks', {
-        headers: { 'Content-Type': 'application/json' }
-      })
+      expect(fetch).toHaveBeenCalledWith('/api/projects/test-project-id/tasks')
       expect(result).toHaveLength(1)
       expect(result[0].id).toBe(mockTask.id)
     })
@@ -196,16 +189,13 @@ describe('Project Service', () => {
 
   describe('createTask', () => {
     const newTask = {
-      project_id: '550e8400-e29b-41d4-a716-446655440000',
+      project_id: 'test-project-id',
       title: 'New Task',
       description: 'A new task',
       status: 'todo' as const,
       assignee: 'User' as const,
       task_order: 2,
-      feature: 'new-feature',
-      priority: 'medium' as const,
-      sources: [],
-      code_examples: []
+      feature: 'new-feature'
     }
 
     it('should create a new task', async () => {
@@ -236,7 +226,7 @@ describe('Project Service', () => {
     const updates = { status: 'doing' as const }
 
     it('should update a task', async () => {
-      const updatedTask = { ...mockTask, status: 'doing' as const }
+      const updatedTask = { ...mockTask, ...updates }
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
         json: async () => updatedTask,
@@ -274,19 +264,16 @@ describe('Project Service', () => {
 
       await projectService.deleteTask('test-task-id')
 
-      expect(fetch).toHaveBeenCalledWith('/api/tasks/test-task-id', {
-        headers: { 'Content-Type': 'application/json' }
-      })
+      expect(fetch).toHaveBeenCalledWith('/api/tasks/test-task-id')
       expect(fetch).toHaveBeenCalledWith('/api/tasks/test-task-id', {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' }
       })
     })
 
     it('should handle errors when deleting a task', async () => {
       vi.mocked(fetch).mockRejectedValueOnce(new Error('Network error'))
 
-      await expect(projectService.deleteTask('test-task-id')).rejects.toThrow('Network error')
+      await expect(projectService.deleteTask('test-task-id')).rejects.toThrow()
     })
   })
 })

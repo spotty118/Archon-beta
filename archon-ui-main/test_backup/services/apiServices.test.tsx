@@ -598,30 +598,24 @@ describe('API Services', () => {
   })
 
   describe('SocketService', () => {
-    test('connects and emits connect event', async () => {
-      const connectPromise = new Promise<void>((resolve) => {
-        socketService.on('connect', () => {
-          expect(socketService.isConnected()).toBe(true)
-          resolve()
-        })
+    test('connects and emits connect event', (done) => {
+      socketService.on('connect', () => {
+        expect(socketService.isConnected()).toBe(true)
+        done()
       })
 
       socketService.connect()
-      await connectPromise
     })
 
-    test('disconnects and emits disconnect event', async () => {
+    test('disconnects and emits disconnect event', (done) => {
       socketService.connect()
       
-      const disconnectPromise = new Promise<void>((resolve) => {
-        socketService.on('disconnect', () => {
-          expect(socketService.isConnected()).toBe(false)
-          resolve()
-        })
+      socketService.on('disconnect', () => {
+        expect(socketService.isConnected()).toBe(false)
+        done()
       })
 
       socketService.disconnect()
-      await disconnectPromise
     })
 
     test('manages event listeners correctly', () => {
