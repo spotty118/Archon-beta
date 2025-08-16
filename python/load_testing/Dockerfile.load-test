@@ -1,0 +1,41 @@
+# Load Testing Container with Python Dependencies
+FROM python:3.12-slim
+
+# Install system dependencies for load testing
+RUN apt-get update && apt-get install -y \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install additional load testing dependencies
+RUN pip install --no-cache-dir \
+    aiohttp \
+    psutil \
+    matplotlib \
+    seaborn \
+    pandas
+
+# Copy load testing code
+COPY load_testing/ ./load_testing/
+COPY src/ ./src/
+
+# Create results directory
+RUN mkdir -p /app/results
+
+# Set environment variables
+ENV PYTHONPATH=/app
+ENV RESULTS_DIR=/app/results
+
+# Health check for the load test runner
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD python -c "import sys; sys.exit(0)"
+
+# Default command runs moderate load test
+CMD ["python", "-m", "load_testing.load_test_suite", "--scenario", "moderate"]

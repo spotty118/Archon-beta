@@ -1,0 +1,257 @@
+groups:
+  - name: archon-api-alerts
+    rules:
+      # High Error Rate Alerts
+      - alert: HighErrorRate
+        expr: rate(archon_http_requests_total{status_code=~"5.."}[5m]) / rate(archon_http_requests_total[5m]) * 100 > 5
+        for: 2m
+        labels:
+          severity: critical
+          service: archon-api
+          category: performance
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value }}% for endpoint {{ $labels.endpoint }}"
+          runbook_url: "https://docs.archon.dev/runbooks/high-error-rate"
+
+      # Slow Response Time Alerts
+      - alert: SlowResponseTime
+        expr: histogram_quantile(0.95, rate(archon_http_request_duration_seconds_bucket[5m])) > 3
+        for: 5m
+        labels:
+          severity: warning
+          service: archon-api
+          category: performance
+        annotations:
+          summary: "Slow API response times"
+          description: "95th percentile response time is {{ $value }}s for {{ $labels.endpoint }}"
+          runbook_url: "https://docs.archon.dev/runbooks/slow-response"
+
+      # Critical Response Time Alert
+      - alert: CriticalResponseTime
+        expr: histogram_quantile(0.95, rate(archon_http_request_duration_seconds_bucket[5m])) > 10
+        for: 1m
+        labels:
+          severity: critical
+          service: archon-api
+          category: performance
+        annotations:
+          summary: "Critical API response times"
+          description: "95th percentile response time is {{ $value }}s for {{ $labels.endpoint }}"
+          runbook_url: "https://docs.archon.dev/runbooks/critical-response"
+
+      # High Memory Usage
+      - alert: HighMemoryUsage
+        expr: archon_memory_usage_percent > 85
+        for: 5m
+        labels:
+          severity: warning
+          service: archon-api
+          category: infrastructure
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value }}%"
+          runbook_url: "https://docs.archon.dev/runbooks/high-memory"
+
+      # Critical Memory Usage
+      - alert: CriticalMemoryUsage
+        expr: archon_memory_usage_percent > 95
+        for: 1m
+        labels:
+          severity: critical
+          service: archon-api
+          category: infrastructure
+        annotations:
+          summary: "Critical memory usage"
+          description: "Memory usage is {{ $value }}% - immediate action required"
+          runbook_url: "https://docs.archon.dev/runbooks/critical-memory"
+
+      # High CPU Usage
+      - alert: HighCPUUsage
+        expr: archon_cpu_usage_percent > 80
+        for: 10m
+        labels:
+          severity: warning
+          service: archon-api
+          category: infrastructure
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value }}%"
+          runbook_url: "https://docs.archon.dev/runbooks/high-cpu"
+
+      # Database Connection Issues
+      - alert: DatabaseConnectionFailure
+        expr: rate(archon_db_queries_total{status="error"}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+          service: archon-api
+          category: database
+        annotations:
+          summary: "Database connection failures"
+          description: "Database error rate is {{ $value }} errors/sec"
+          runbook_url: "https://docs.archon.dev/runbooks/database-errors"
+
+      # Slow Database Queries
+      - alert: SlowDatabaseQueries
+        expr: histogram_quantile(0.95, rate(archon_db_query_duration_seconds_bucket[5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: archon-api
+          category: database
+        annotations:
+          summary: "Slow database queries detected"
+          description: "95th percentile DB query time is {{ $value }}s for {{ $labels.operation }} on {{ $labels.table }}"
+          runbook_url: "https://docs.archon.dev/runbooks/slow-queries"
+
+  - name: archon-cache-alerts
+    rules:
+      # Low Cache Hit Rate
+      - alert: LowCacheHitRate
+        expr: archon_cache_hit_ratio < 0.7
+        for: 10m
+        labels:
+          severity: warning
+          service: archon-api
+          category: performance
+        annotations:
+          summary: "Low cache hit rate"
+          description: "Cache hit rate is {{ $value | humanizePercentage }}"
+          runbook_url: "https://docs.archon.dev/runbooks/low-cache-hit"
+
+      # Cache Service Unavailable
+      - alert: CacheServiceDown
+        expr: archon_app_health{component="cache"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: archon-api
+          category: infrastructure
+        annotations:
+          summary: "Cache service is down"
+          description: "Redis cache service is not responding"
+          runbook_url: "https://docs.archon.dev/runbooks/cache-down"
+
+  - name: archon-business-alerts
+    rules:
+      # High MCP Tool Failure Rate
+      - alert: HighMCPToolFailureRate
+        expr: rate(archon_mcp_tool_executions_total{status="error"}[5m]) / rate(archon_mcp_tool_executions_total[5m]) * 100 > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: archon-api
+          category: business
+        annotations:
+          summary: "High MCP tool failure rate"
+          description: "MCP tool {{ $labels.tool_name }} failure rate is {{ $value }}%"
+          runbook_url: "https://docs.archon.dev/runbooks/mcp-failures"
+
+      # Document Processing Failures
+      - alert: DocumentProcessingFailures
+        expr: rate(archon_documents_processed_total{status="error"}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: archon-api
+          category: business
+        annotations:
+          summary: "Document processing failures"
+          description: "Document processing error rate is {{ $value }} errors/sec"
+          runbook_url: "https://docs.archon.dev/runbooks/document-processing"
+
+      # Embedding Generation Failures
+      - alert: EmbeddingGenerationFailures
+        expr: rate(archon_embeddings_generated_total{status="error"}[5m]) > 0.1
+        for: 3m
+        labels:
+          severity: warning
+          service: archon-api
+          category: business
+        annotations:
+          summary: "Embedding generation failures"
+          description: "Embedding generation error rate is {{ $value }} errors/sec for model {{ $labels.model }}"
+          runbook_url: "https://docs.archon.dev/runbooks/embedding-failures"
+
+  - name: archon-external-service-alerts
+    rules:
+      # External API High Latency
+      - alert: ExternalAPIHighLatency
+        expr: histogram_quantile(0.95, rate(archon_external_api_duration_seconds_bucket[5m])) > 30
+        for: 5m
+        labels:
+          severity: warning
+          service: archon-api
+          category: external
+        annotations:
+          summary: "External API high latency"
+          description: "External service {{ $labels.service }} 95th percentile latency is {{ $value }}s"
+          runbook_url: "https://docs.archon.dev/runbooks/external-latency"
+
+      # Circuit Breaker Open
+      - alert: CircuitBreakerOpen
+        expr: archon_circuit_breaker_state == 1
+        for: 1m
+        labels:
+          severity: critical
+          service: archon-api
+          category: external
+        annotations:
+          summary: "Circuit breaker open"
+          description: "Circuit breaker for {{ $labels.service }} is open"
+          runbook_url: "https://docs.archon.dev/runbooks/circuit-breaker"
+
+      # External Service Unavailable
+      - alert: ExternalServiceUnavailable
+        expr: rate(archon_external_api_requests_total{status_code=~"5.."}[5m]) / rate(archon_external_api_requests_total[5m]) * 100 > 50
+        for: 3m
+        labels:
+          severity: critical
+          service: archon-api
+          category: external
+        annotations:
+          summary: "External service unavailable"
+          description: "External service {{ $labels.service }} error rate is {{ $value }}%"
+          runbook_url: "https://docs.archon.dev/runbooks/external-unavailable"
+
+  - name: archon-sla-alerts
+    rules:
+      # SLA Compliance Violation
+      - alert: SLAComplianceViolation
+        expr: archon_sla_compliance_percent < 99.0
+        for: 5m
+        labels:
+          severity: warning
+          service: archon-api
+          category: sla
+        annotations:
+          summary: "SLA compliance violation"
+          description: "SLA compliance for {{ $labels.sla_type }} is {{ $value }}%"
+          runbook_url: "https://docs.archon.dev/runbooks/sla-violation"
+
+      # Service Availability Low
+      - alert: ServiceAvailabilityLow
+        expr: archon_service_availability_percent < 99.5
+        for: 2m
+        labels:
+          severity: critical
+          service: archon-api
+          category: availability
+        annotations:
+          summary: "Service availability low"
+          description: "Service {{ $labels.service }} availability is {{ $value }}%"
+          runbook_url: "https://docs.archon.dev/runbooks/low-availability"
+
+      # Service Uptime Alert
+      - alert: ServiceRestart
+        expr: archon_service_uptime_seconds < 300
+        for: 1m
+        labels:
+          severity: info
+          service: archon-api
+          category: deployment
+        annotations:
+          summary: "Service recently restarted"
+          description: "Service has been running for only {{ $value }} seconds"
+          runbook_url: "https://docs.archon.dev/runbooks/service-restart"

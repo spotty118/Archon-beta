@@ -1,0 +1,49 @@
+# MCP Service - Lightweight HTTP-based microservice
+FROM python:3.11-slim
+
+# Security: Create non-root user
+RUN groupadd --gid 1001 archon && \
+    useradd --uid 1001 --gid archon --shell /bin/bash --create-home archon
+
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.mcp.txt .
+RUN pip install --no-cache-dir -r requirements.mcp.txt
+
+# Create minimal directory structure with proper permissions
+RUN mkdir -p src/mcp/modules src/server/services src/server/config && \
+    chown -R archon:archon /app
+
+# Switch to non-root user
+USER archon
+
+# Copy only MCP-specific files (lightweight protocol wrapper)
+COPY --chown=archon:archon src/mcp/ src/mcp/
+COPY --chown=archon:archon src/__init__.py src/
+
+# Copy only the minimal server files MCP needs for HTTP communication
+COPY --chown=archon:archon src/server/__init__.py src/server/
+COPY --chown=archon:archon src/server/services/__init__.py src/server/services/
+COPY --chown=archon:archon src/server/services/mcp_service_client.py src/server/services/
+COPY --chown=archon:archon src/server/services/client_manager.py src/server/services/
+COPY --chown=archon:archon src/server/services/mcp_session_manager.py src/server/services/
+COPY --chown=archon:archon src/server/config/__init__.py src/server/config/
+COPY --chown=archon:archon src/server/config/service_discovery.py src/server/config/
+COPY --chown=archon:archon src/server/config/logfire_config.py src/server/config/
+
+# Set environment variables
+ENV PYTHONPATH="/app:$PYTHONPATH"
+ENV PYTHONUNBUFFERED=1
+
+# Expose MCP port
+ARG ARCHON_MCP_PORT=8051
+ENV ARCHON_MCP_PORT=${ARCHON_MCP_PORT}
+EXPOSE ${ARCHON_MCP_PORT}
+
+# Security: Add health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD sh -c "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:${ARCHON_MCP_PORT}/health')\""
+
+# Run the MCP server as non-root user
+CMD ["python", "-m", "src.mcp.mcp_server"]

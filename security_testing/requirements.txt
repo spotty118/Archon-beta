@@ -1,0 +1,54 @@
+# Security Testing Framework Dependencies
+# OWASP-based security testing for Archon V2 Beta
+
+# HTTP client for security testing
+httpx>=0.25.0
+aiohttp>=3.9.0
+
+# Async testing and utilities
+asyncio-throttle>=1.0.2
+aiofiles>=23.0.0
+
+# JSON and data handling
+pydantic>=2.5.0
+python-multipart>=0.0.6
+
+# Security testing utilities
+cryptography>=41.0.0
+passlib>=1.7.4
+python-jose>=3.3.0
+
+# PDF and document parsing for file upload tests
+PyPDF2>=3.0.0
+python-magic>=0.4.27
+python-docx>=0.8.11
+
+# HTML parsing and XSS detection
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+html5lib>=1.1
+
+# URL validation and parsing
+validators>=0.22.0
+urllib3>=2.0.0
+
+# Logging and monitoring
+structlog>=23.0.0
+colorlog>=6.7.0
+
+# Testing utilities
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-mock>=3.12.0
+
+# Report generation
+jinja2>=3.1.0
+markdown>=3.5.0
+
+# Network utilities
+dnspython>=2.4.0
+ipaddress>=1.0.23  # Built-in module, but listed for clarity
+
+# Development and debugging
+rich>=13.7.0  # For better console output
+click>=8.1.0  # For CLI enhancements

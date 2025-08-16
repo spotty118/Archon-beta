@@ -1,0 +1,122 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+        cors:
+          allowed_origins:
+            - "http://localhost:3737"  # Frontend
+            - "http://localhost:8181"  # API
+          allowed_headers:
+            - "*"
+  
+  # Prometheus metrics receiver
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'otel-collector'
+          scrape_interval: 10s
+          static_configs:
+            - targets: ['0.0.0.0:8888']
+
+processors:
+  # Batch processor to reduce number of outgoing connections
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+    send_batch_max_size: 2048
+
+  # Memory limiter to prevent OOM
+  memory_limiter:
+    limit_mib: 512
+    spike_limit_mib: 128
+    check_interval: 5s
+
+  # Resource processor to add/modify resource attributes
+  resource:
+    attributes:
+      - key: service.name
+        value: archon-api
+        action: upsert
+      - key: service.version
+        value: 2.0.0-beta
+        action: upsert
+      - key: deployment.environment
+        value: production
+        action: upsert
+
+  # Attributes processor for spans
+  attributes:
+    actions:
+      - key: http.url
+        action: delete  # Remove sensitive URLs
+      - key: http.request.header.authorization
+        action: delete  # Remove auth headers
+      - key: db.statement
+        action: hash    # Hash SQL statements
+
+  # Span processor for filtering and sampling
+  probabilistic_sampler:
+    sampling_percentage: 100  # 100% sampling for beta testing
+
+exporters:
+  # Jaeger exporter for traces
+  jaeger:
+    endpoint: jaeger:14250
+    tls:
+      insecure: true
+
+  # Prometheus exporter for metrics
+  prometheus:
+    endpoint: "0.0.0.0:8888"
+    namespace: "archon"
+    const_labels:
+      service: "archon-api"
+      version: "2.0.0-beta"
+
+  # OTLP exporter for sending to external services
+  otlp:
+    endpoint: "http://jaeger:14268/api/traces"
+    tls:
+      insecure: true
+    headers:
+      "X-Service-Name": "archon-api"
+
+  # Logging exporter for debugging
+  logging:
+    loglevel: info
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, attributes, probabilistic_sampler, batch]
+      exporters: [jaeger, logging]
+
+    metrics:
+      receivers: [otlp, prometheus]
+      processors: [memory_limiter, resource, batch]
+      exporters: [prometheus, logging]
+
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [logging]
+
+  extensions:
+    health_check:
+      endpoint: 0.0.0.0:13133
+    pprof:
+      endpoint: 0.0.0.0:1777
+    zpages:
+      endpoint: 0.0.0.0:55679
+
+  telemetry:
+    logs:
+      level: "info"
+    metrics:
+      address: 0.0.0.0:8888
