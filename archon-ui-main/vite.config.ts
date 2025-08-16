@@ -13,13 +13,10 @@ export default defineConfig(({ mode }: ConfigEnv): UserConfig => {
   const env = loadEnv(mode, process.cwd(), '');
   
   // Get host and port from environment variables or use defaults
-  // For internal Docker communication, use the service name
-  // For external access, use the HOST from environment
-  const isDocker = process.env.DOCKER_ENV === 'true' || !!process.env.HOSTNAME;
-  const internalHost = 'archon-server';  // Docker service name for internal communication
-  const externalHost = process.env.HOST || 'localhost';  // Host for external access
-  const host = isDocker ? internalHost : externalHost;
-  const port = process.env.ARCHON_SERVER_PORT || env.ARCHON_SERVER_PORT || '8181';
+  // Always use the external host for proxy since we're connecting to remote server
+  const backendHost = env.VITE_API_URL ? env.VITE_API_URL.replace('http://', '').replace('https://', '') : '134.199.207.41:8181';
+  const mcpHost = env.VITE_MCP_URL ? env.VITE_MCP_URL.replace('http://', '').replace('https://', '') : '134.199.207.41:8051';
+  const agentsHost = env.VITE_AGENTS_URL ? env.VITE_AGENTS_URL.replace('http://', '').replace('https://', '') : '134.199.207.41:8052';
   
   return {
     plugins: [
@@ -329,26 +326,40 @@ export default defineConfig(({ mode }: ConfigEnv): UserConfig => {
       strictPort: true, // Exit if port is in use
       proxy: {
         '/api': {
-          target: `http://${host}:${port}`,
+          target: `http://${backendHost}`,
           changeOrigin: true,
           secure: false,
           ws: true,
           configure: (proxy, options) => {
             proxy.on('error', (err, req, res) => {
               console.log('🚨 [VITE PROXY ERROR]:', err.message);
-              console.log('🚨 [VITE PROXY ERROR] Target:', `http://${host}:${port}`);
+              console.log('🚨 [VITE PROXY ERROR] Target:', `http://${backendHost}`);
               console.log('🚨 [VITE PROXY ERROR] Request:', req.url);
             });
             proxy.on('proxyReq', (proxyReq, req, res) => {
-              console.log('🔄 [VITE PROXY] Forwarding:', req.method, req.url, 'to', `http://${host}:${port}${req.url}`);
+              console.log('🔄 [VITE PROXY] Forwarding:', req.method, req.url, 'to', `http://${backendHost}${req.url}`);
             });
           }
         },
         // Socket.IO specific proxy configuration
         '/socket.io': {
-          target: `http://${host}:${port}`,
+          target: `http://${backendHost}`,
           changeOrigin: true,
           ws: true
+        },
+        // MCP service proxy
+        '/mcp': {
+          target: `http://${mcpHost}`,
+          changeOrigin: true,
+          secure: false,
+          rewrite: (path) => path.replace(/^\/mcp/, '')
+        },
+        // Agents service proxy
+        '/agents': {
+          target: `http://${agentsHost}`,
+          changeOrigin: true,
+          secure: false,
+          rewrite: (path) => path.replace(/^\/agents/, '')
         }
       },
     },
@@ -412,8 +423,8 @@ export default defineConfig(({ mode }: ConfigEnv): UserConfig => {
       cssCodeSplit: true
     },
     define: {
-      'import.meta.env.VITE_HOST': JSON.stringify(host),
-      'import.meta.env.VITE_PORT': JSON.stringify(port),
+      'import.meta.env.VITE_HOST': JSON.stringify(backendHost.split(':')[0]),
+      'import.meta.env.VITE_PORT': JSON.stringify(backendHost.split(':')[1] || '8181'),
     },
     resolve: {
       alias: {
@@ -434,8 +445,8 @@ export default defineConfig(({ mode }: ConfigEnv): UserConfig => {
         '**/*.test.{ts,tsx}',
       ],
       env: {
-        VITE_HOST: host,
-        VITE_PORT: port,
+        VITE_HOST: backendHost.split(':')[0],
+        VITE_PORT: backendHost.split(':')[1] || '8181',
       },
       coverage: {
         provider: 'v8',

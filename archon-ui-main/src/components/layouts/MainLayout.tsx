@@ -54,13 +54,13 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
           const healthData = await response.json();
           console.log('📋 Backend health check:', healthData);
           
-          // Check if backend is truly ready (not just started)
-          if (healthData.ready === true) {
+          // Check if backend is healthy
+          if (healthData.status === 'healthy') {
             console.log('✅ Backend is fully initialized');
             setBackendReady(true);
           } else {
             // Backend is starting up but not ready yet
-            console.log(`🔄 Backend initializing... (attempt ${retryCount + 1}/${maxRetries}):`, healthData.message || 'Loading credentials...');
+            console.log(`🔄 Backend initializing... (attempt ${retryCount + 1}/${maxRetries}):`, healthData.message || 'Backend not ready...');
             
             // Retry with shorter interval during initialization
             if (retryCount < maxRetries) {
