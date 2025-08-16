@@ -6,6 +6,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { credentialsService } from '../../services/credentialsService';
 import { useToast } from '../../contexts/ToastContext';
 import { serverHealthService } from '../../services/serverHealthService';
+import { getApiUrl } from '../../config/api';
 
 export const FeaturesSection = () => {
   const {
@@ -39,7 +40,7 @@ export const FeaturesSection = () => {
       const [logfireResponse, projectsResponse, projectsHealthResponse, disconnectScreenRes] = await Promise.all([
         credentialsService.getCredential('LOGFIRE_ENABLED').catch(() => ({ value: undefined })),
         credentialsService.getCredential('PROJECTS_ENABLED').catch(() => ({ value: undefined })),
-        fetch(`${credentialsService['baseUrl']}/api/projects/health`).catch(() => null),
+        fetch(`${getApiUrl()}/projects/health`).catch(() => null),
         credentialsService.getCredential('DISCONNECT_SCREEN_ENABLED').catch(() => ({ value: 'true' }))
       ]);
       
@@ -58,7 +59,7 @@ export const FeaturesSection = () => {
         response: projectsHealthResponse,
         ok: projectsHealthResponse?.ok,
         status: projectsHealthResponse?.status,
-        url: `${credentialsService['baseUrl']}/api/projects/health`
+        url: `${getApiUrl()}/projects/health`
       });
       
       if (projectsHealthResponse && projectsHealthResponse.ok) {
@@ -179,7 +180,7 @@ export const FeaturesSection = () => {
       setLoading(true);
       setDisconnectScreenEnabled(checked);
 
-      await serverHealthService.updateSettings(checked);
+      await serverHealthService.updateSettings({ enabled: checked });
 
       showToast(
         checked ? 'Disconnect Screen Enabled' : 'Disconnect Screen Disabled', 

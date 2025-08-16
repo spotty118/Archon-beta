@@ -248,7 +248,7 @@ class TestService {
   async hasTestResults(): Promise<boolean> {
     try {
       // Check for latest test results via API
-      const response = await fetch(`${API_BASE_URL}/api/tests/latest-results`);
+      const response = await fetch(`${API_BASE_URL}/tests/latest-results`);
       return response.ok;
     } catch {
       return false;
@@ -446,4 +446,4 @@ class TestService {
 
 // Export singleton instance
 export const testService = new TestService();
-export default testService; 
+export default testService;
