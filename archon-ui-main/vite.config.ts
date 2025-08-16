@@ -14,9 +14,15 @@ export default defineConfig(({ mode }: ConfigEnv): UserConfig => {
   
   // Get host and port from environment variables or use defaults
   // Always use the external host for proxy since we're connecting to remote server
-  const backendHost = env.VITE_API_URL ? env.VITE_API_URL.replace('http://', '').replace('https://', '') : '134.199.207.41:8181';
-  const mcpHost = env.VITE_MCP_URL ? env.VITE_MCP_URL.replace('http://', '').replace('https://', '') : '134.199.207.41:8051';
-  const agentsHost = env.VITE_AGENTS_URL ? env.VITE_AGENTS_URL.replace('http://', '').replace('https://', '') : '134.199.207.41:8052';
+  const backendHost = env.VITE_API_URL && env.VITE_API_URL.startsWith('http') 
+    ? env.VITE_API_URL.replace('http://', '').replace('https://', '') 
+    : '134.199.207.41:8181';
+  const mcpHost = env.VITE_MCP_URL && env.VITE_MCP_URL.startsWith('http')
+    ? env.VITE_MCP_URL.replace('http://', '').replace('https://', '')
+    : '134.199.207.41:8051';
+  const agentsHost = env.VITE_AGENTS_URL && env.VITE_AGENTS_URL.startsWith('http')
+    ? env.VITE_AGENTS_URL.replace('http://', '').replace('https://', '')
+    : '134.199.207.41:8052';
   
   return {
     plugins: [
