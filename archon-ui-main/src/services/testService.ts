@@ -147,7 +147,7 @@ class TestService {
     onError?: (error: Error) => void,
     onComplete?: () => void
   ): Promise<string> {
-    return this.runTestsWithEndpoint('/run-tests-with-coverage', onMessage, onError, onComplete);
+    return this.runTestsWithEndpoint('/api/run-tests-with-coverage', onMessage, onError, onComplete);
   }
 
   /**
@@ -254,8 +254,8 @@ class TestService {
   async hasTestResults(): Promise<boolean> {
     try {
       // Check for latest test results via API
-      const response = await fetch(`${API_BASE_URL}/tests/latest-results`);
-      return response.ok;
+      const response = await callAPI<any>('/tests/latest-results');
+      return true;
     } catch {
       return false;
     }
