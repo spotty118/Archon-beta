@@ -188,7 +188,9 @@ class MCPServerService {
     // Close existing connection if any
     this.disconnectLogs();
 
-    const ws = new WebSocket(`${getWebSocketUrl()}/api/mcp/logs/stream`);
+    // Use relative WebSocket URL to go through Vite proxy
+    const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/mcp/logs/stream`;
+    const ws = new WebSocket(wsUrl);
     this.logWebSocket = ws;
 
     ws.onmessage = (event) => {
@@ -346,4 +348,4 @@ export const mcpServerService = new MCPServerService();
 export const getMCPTools = async () => {
   console.warn('getMCPTools is deprecated. Use mcpServerService.getAvailableTools() or mcpClientService instead.');
   return mcpServerService.getAvailableTools();
-}; 
+};
