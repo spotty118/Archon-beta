@@ -17,9 +17,11 @@ RUN pip install --user --no-cache-dir -r requirements.server.txt
 # Runtime stage
 FROM python:3.11-slim
 
-# Security: Create non-root user
+# Security: Create non-root user and add to docker group
 RUN groupadd --gid 1001 archon && \
-    useradd --uid 1001 --gid archon --shell /bin/bash --create-home archon
+    useradd --uid 1001 --gid archon --shell /bin/bash --create-home archon && \
+    groupadd docker && \
+    usermod -aG docker archon
 
 WORKDIR /app
 
