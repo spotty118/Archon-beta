@@ -72,6 +72,7 @@ export interface SearchOptions {
 
 // Use relative URL to go through Vite proxy
 import { API_BASE_URL } from '../config/api';
+import { csrfService } from './csrfService';
 // const API_BASE_URL = '/api'; // Now imported from config
 
 // Helper function for API requests with timeout
@@ -93,11 +94,27 @@ async function apiRequest<T>(
   
   try {
     console.log(`🚀 [KnowledgeBase] Sending fetch request...`);
+    
+    // Get CSRF headers for state-changing operations
+    let headers = {
+      'Content-Type': 'application/json',
+      ...options.headers
+    };
+    
+    // Add CSRF token for POST, PUT, DELETE, PATCH requests
+    if (options.method && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(options.method.toUpperCase())) {
+      try {
+        const csrfHeaders = await csrfService.getHeaders();
+        headers = { ...headers, ...csrfHeaders };
+        console.log(`🔐 [KnowledgeBase] Added CSRF token for ${options.method} request`);
+      } catch (csrfError) {
+        console.error(`❌ [KnowledgeBase] Failed to get CSRF token:`, csrfError);
+        // Continue without CSRF token for now, but log the error
+      }
+    }
+    
     const response = await fetch(url, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-      },
+      headers,
       ...options,
       signal: controller.signal
     });
@@ -298,4 +315,4 @@ class KnowledgeBaseService {
 }
 
 // Export singleton instance
-export const knowledgeBaseService = new KnowledgeBaseService() 
+export const knowledgeBaseService = new KnowledgeBaseService()
