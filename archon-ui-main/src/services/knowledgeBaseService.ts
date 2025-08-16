@@ -241,9 +241,11 @@ class KnowledgeBaseService {
       formData.append('tags', JSON.stringify(metadata.tags))
     }
     
+    // Use direct fetch for file uploads (CSRF protection disabled for documents endpoint)
     const response = await fetch(`${API_BASE_URL}/documents/upload`, {
       method: 'POST',
       body: formData
+      // Note: Don't set Content-Type header for FormData, let browser set it with boundary
     })
 
     if (!response.ok) {
