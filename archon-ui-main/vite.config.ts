@@ -336,6 +336,7 @@ export default defineConfig(({ mode }: ConfigEnv): UserConfig => {
           changeOrigin: true,
           secure: false,
           ws: true,
+          rewrite: (path) => path.replace(/^\/api/, '/api'),
           configure: (proxy, options) => {
             proxy.on('error', (err, req, res) => {
               console.log('🚨 [VITE PROXY ERROR]:', err.message);

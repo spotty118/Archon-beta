@@ -42,6 +42,11 @@ export function getApiBasePath(): string {
     return '/api';
   }
   
+  // If the apiUrl is already '/api', don't append again
+  if (apiUrl === '/api') {
+    return '/api';
+  }
+  
   // Otherwise, append /api to the base URL
   return `${apiUrl}/api`;
 }
