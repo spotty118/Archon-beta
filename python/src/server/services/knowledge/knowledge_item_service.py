@@ -405,8 +405,8 @@ class KnowledgeItemService:
             if pages_response.data:
                 return pages_response.data[0].get("url", f"source://{source_id}")
 
-        except Exception:
-            pass
+        except Exception as e:
+            safe_logfire_info(f"Failed to get first page URL for source {source_id}: {e}")
 
         return f"source://{source_id}"
 
@@ -422,7 +422,8 @@ class KnowledgeItemService:
 
             return code_examples_response.data if code_examples_response.data else []
 
-        except Exception:
+        except Exception as e:
+            safe_logfire_info(f"Failed to get code examples for source {source_id}: {e}")
             return []
 
     def _determine_source_type(self, metadata: dict[str, Any], url: str) -> str:

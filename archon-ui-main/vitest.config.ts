@@ -14,8 +14,8 @@ export default defineConfig({
     ],
     exclude: ['node_modules', 'dist', '.git', '.cache', 'test.backup', '*.backup/**', 'test-backups'],
     reporters: ['dot', 'json'],
-    outputFile: { 
-      json: './public/test-results/test-results.json' 
+    outputFile: {
+      json: './coverage/test-results.json'
     },
     testTimeout: 10000, // 10 seconds timeout
     hookTimeout: 10000, // 10 seconds for setup/teardown
@@ -29,7 +29,7 @@ export default defineConfig({
         'json-summary',
         'lcov'
       ],
-      reportsDirectory: './public/test-results/coverage',
+      reportsDirectory: './coverage',
       clean: false, // Don't clean the directory as it may be in use
       reportOnFailure: true, // Generate coverage reports even when tests fail
       exclude: [
@@ -49,7 +49,14 @@ export default defineConfig({
       include: [
         'src/**/*.{ts,tsx}',
       ],
-      thresholds: {}
+      thresholds: {
+        global: {
+          branches: 70,
+          functions: 70,
+          lines: 75,
+          statements: 75
+        }
+      }
     },
   },
   resolve: {

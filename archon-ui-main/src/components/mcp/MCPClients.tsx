@@ -3,6 +3,7 @@ import { Plus, Settings, Trash2, X } from 'lucide-react';
 import { ClientCard } from './ClientCard';
 import { ToolTestingPanel } from './ToolTestingPanel';
 import { Button } from '../ui/Button';
+import { useConditionalPolling } from '../../hooks/useSmartPolling';
 import { mcpClientService, MCPClient, MCPClientConfig } from '../../services/mcpClientService';
 import { useToast } from '../../contexts/ToastContext';
 import { DeleteConfirmModal } from '../../pages/ProjectPage';
@@ -59,15 +60,15 @@ export const MCPClients = memo(() => {
   // Load clients when component mounts
   useEffect(() => {
     loadAllClients();
-    
-    // Set up periodic status checks every 10 seconds
-    const statusInterval = setInterval(() => {
-      // Silently refresh client statuses without loading state
-      refreshClientStatuses();
-    }, 10000);
-    
-    return () => clearInterval(statusInterval);
   }, []);
+
+  // Smart polling for client status updates - only poll if we have clients
+  useConditionalPolling(clients.length > 0, {
+    pollFunction: refreshClientStatuses,
+    baseInterval: 10000, // 10 seconds base interval
+    immediate: false,
+    respectHighFrequencyPolling: true
+  });
 
   /**
    * Refresh client statuses without showing loading state

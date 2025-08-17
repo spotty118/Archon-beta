@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { useStaggeredEntrance } from '../hooks/useStaggeredEntrance';
+import { useSmartPolling } from '../hooks/useSmartPolling';
 import { useToast } from '../contexts/ToastContext';
 import { mcpServerService, ServerStatus, LogEntry, ServerConfig } from '../services/mcpServerService';
 import { IDEGlobalRules } from '../components/settings/IDEGlobalRules';
@@ -50,7 +51,6 @@ export const MCPPage = () => {
   const [selectedIDE, setSelectedIDE] = useState<SupportedIDE>('windsurf');
   const logsEndRef = useRef<HTMLDivElement>(null);
   const logsContainerRef = useRef<HTMLDivElement>(null);
-  const statusPollInterval = useRef<NodeJS.Timeout | null>(null);
   const { showToast } = useToast();
 
   // Tab state for switching between Server Control and Clients
@@ -62,18 +62,19 @@ export const MCPPage = () => {
     0.15
   );
 
-  // Load initial status and start polling
+  // Smart polling for status updates
+  useSmartPolling({
+    pollFunction: loadStatus,
+    baseInterval: 5000, // 5 seconds base interval
+    enabled: true,
+    immediate: true,
+    respectHighFrequencyPolling: true
+  });
+
+  // Load initial configuration
   useEffect(() => {
-    loadStatus();
     loadConfiguration();
-
-    // Start polling for status updates every 5 seconds
-    statusPollInterval.current = setInterval(loadStatus, 5000);
-
     return () => {
-      if (statusPollInterval.current) {
-        clearInterval(statusPollInterval.current);
-      }
       mcpServerService.disconnectLogs();
     };
   }, []);

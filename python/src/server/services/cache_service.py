@@ -184,15 +184,23 @@ class CacheService:
         
         try:
             cache_pattern = self._get_cache_key(category, pattern)
-            keys = await self.redis_client.keys(cache_pattern)
             
-            if keys:
-                deleted = await self.redis_client.delete(*keys)
-                logger.info(f"Invalidated {deleted} cache entries for {category}:{pattern}")
-                return deleted
-            
-            return 0
-            
+            # Use SCAN to avoid blocking Redis; batch deletes for efficiency
+            deleted_total = 0
+            batch: list[str] = []
+            async for key in self.redis_client.scan_iter(match=cache_pattern, count=1000):
+                batch.append(key)
+                if len(batch) >= 500:
+                    await self.redis_client.delete(*batch)
+                    deleted_total += len(batch)
+                    batch.clear()
+            if batch:
+                await self.redis_client.delete(*batch)
+                deleted_total += len(batch)
+            if deleted_total:
+                logger.info(f"Invalidated {deleted_total} cache entries for {category}:{pattern}")
+            return deleted_total
+         
         except Exception as e:
             logger.warning(f"Cache invalidation failed for {category}:{pattern}: {e}")
             return 0

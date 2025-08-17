@@ -557,8 +557,14 @@ async def initialize_credentials() -> None:
                 env_key = key.upper()  # Convert to uppercase for env vars
                 os.environ[env_key] = str(value)
                 logger.info(f"Set environment variable: {env_key}")
-        except Exception:
-            # This is expected for optional credentials
-            logger.debug(f"Optional credential not set: {key}")
+            else:
+                # Credential exists but is empty/None - this is expected for optional credentials
+                logger.debug(f"Optional credential is empty: {key}")
+        except ValueError as e:
+            # Credential format or validation errors
+            logger.warning(f"Invalid credential format for {key}: {e}")
+        except Exception as e:
+            # Database errors, decryption failures, or other system issues
+            logger.warning(f"Failed to retrieve optional credential {key}: {e}")
 
     logger.info("✅ Credentials loaded and environment variables set")

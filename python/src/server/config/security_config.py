@@ -90,15 +90,30 @@ class SecuritySettings(BaseModel):
 def get_security_settings() -> SecuritySettings:
     """Get cached security settings."""
     # Load from environment
-    allowed_origins = os.getenv("CORS_ALLOWED_ORIGINS", "").strip()
-    if allowed_origins:
-        origins = [origin.strip() for origin in allowed_origins.split(",")]
+    allowed_origins_env = os.getenv("CORS_ALLOWED_ORIGINS", "").strip()
+    if allowed_origins_env:
+        origins = [origin.strip() for origin in allowed_origins_env.split(",")]
     else:
         # Default to localhost for development
         origins = None
-    
+
+    # Enforce JWT secret policy
+    dev_mode = os.getenv("DEV_MODE", "false").lower() == "true"
+    jwt_secret = os.getenv("JWT_SECRET_KEY")
+
+    if not jwt_secret and not dev_mode:
+        # In production, require explicit JWT secret; avoid ephemeral secrets
+        raise ValueError(
+            "JWT_SECRET_KEY environment variable is required in production. "
+            "Set DEV_MODE=true to allow a generated development-only secret."
+        )
+
+    # Get default allowed origins from a temporary instance (ensures valid defaults)
+    default_allowed = SecuritySettings().allowed_origins
+
     return SecuritySettings(
-        allowed_origins=origins if origins else SecuritySettings().allowed_origins
+        allowed_origins=origins if origins else default_allowed,
+        secret_key=jwt_secret or secrets.token_urlsafe(32),
     )
 
 
@@ -153,6 +168,16 @@ async def require_auth(current_user: TokenData = Depends(get_current_user)) -> T
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required",
+        )
+    return current_user
+
+def require_admin(current_user: TokenData = Depends(get_current_user)) -> TokenData:
+    """Dependency that requires admin privileges for an endpoint."""
+    scopes = current_user.scopes or []
+    if "admin" not in scopes:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin privileges required",
         )
     return current_user
 
@@ -346,6 +371,7 @@ __all__ = [
     "verify_token",
     "get_current_user",
     "require_auth",
+    "require_admin",
     "validate_input",
     "validate_url",
     "validate_file_upload",

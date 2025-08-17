@@ -10,10 +10,11 @@ Handles:
 
 import asyncio
 import secrets
+import re
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, Depends, Query, Path
+from pydantic import BaseModel, Field, validator
 
 # Removed direct logging import - using unified config
 # Set up standard logger for background tasks
@@ -32,17 +33,23 @@ from ..services.projects import (
 )
 from ..services.projects.document_service import DocumentService
 from ..services.projects.versioning_service import VersioningService
+from ..middleware.auth_middleware import require_authentication
 
 # Import Socket.IO broadcast functions from socketio_handlers
 from .socketio_handlers import broadcast_project_update
 
-router = APIRouter(prefix="/api", tags=["projects"])
+router = APIRouter(prefix="/api", tags=["projects"], dependencies=[Depends(require_authentication)])
 
 
 class CreateProjectRequest(BaseModel):
-    title: str
-    description: str | None = None
-    github_repo: str | None = None
+    title: str = Field(..., min_length=1, max_length=200, description="Project title")
+    description: str | None = Field(None, max_length=2000, description="Optional project description")
+    github_repo: str | None = Field(
+        None,
+        min_length=1,
+        max_length=200,
+        description="GitHub repository as 'owner/repo' or a full https URL",
+    )
     docs: list[Any] | None = None
     features: list[Any] | None = None
     data: list[Any] | None = None
@@ -50,11 +57,43 @@ class CreateProjectRequest(BaseModel):
     business_sources: list[str] | None = None  # List of knowledge source IDs
     pinned: bool | None = None  # Whether this project should be pinned to top
 
+    @validator("github_repo")
+    def validate_github_repo(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        s = v.strip()
+        # Accept full HTTP(S) URL or owner/repo pattern
+        if s.startswith("http://") or s.startswith("https://"):
+            return s
+        if re.match(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", s):
+            return s
+        raise ValueError("github_repo must be a full URL or 'owner/repo' format")
+
+    @validator("technical_sources", "business_sources")
+    def validate_sources(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return v
+        if len(v) > 50:
+            raise ValueError("Too many source IDs (max 50)")
+        uuid_re = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+        for sid in v:
+            if not isinstance(sid, str) or not uuid_re.match(sid):
+                raise ValueError("Invalid source ID format")
+        return v
+
+    @validator("docs", "features", "data")
+    def validate_lists(cls, v: list[Any] | None) -> list[Any] | None:
+        if v is None:
+            return v
+        if isinstance(v, list) and len(v) > 200:
+            raise ValueError("List too large (max 200 items)")
+        return v
+
 
 class UpdateProjectRequest(BaseModel):
-    title: str | None = None
-    description: str | None = None  # Add description field
-    github_repo: str | None = None
+    title: str | None = Field(None, min_length=1, max_length=200)
+    description: str | None = Field(None, max_length=2000)  # Add description field
+    github_repo: str | None = Field(None, min_length=1, max_length=200)
     docs: list[Any] | None = None
     features: list[Any] | None = None
     data: list[Any] | None = None
@@ -62,15 +101,62 @@ class UpdateProjectRequest(BaseModel):
     business_sources: list[str] | None = None  # List of knowledge source IDs
     pinned: bool | None = None  # Whether this project is pinned to top
 
+    @validator("github_repo")
+    def validate_github_repo(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        s = v.strip()
+        if s.startswith("http://") or s.startswith("https://"):
+            return s
+        if re.match(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", s):
+            return s
+        raise ValueError("github_repo must be a full URL or 'owner/repo' format")
+
+    @validator("technical_sources", "business_sources")
+    def validate_sources(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return v
+        if len(v) > 50:
+            raise ValueError("Too many source IDs (max 50)")
+        uuid_re = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+        for sid in v:
+            if not isinstance(sid, str) or not uuid_re.match(sid):
+                raise ValueError("Invalid source ID format")
+        return v
+
+    @validator("docs", "features", "data")
+    def validate_lists(cls, v: list[Any] | None) -> list[Any] | None:
+        if v is None:
+            return v
+        if isinstance(v, list) and len(v) > 200:
+            raise ValueError("List too large (max 200 items)")
+        return v
+
 
 class CreateTaskRequest(BaseModel):
-    project_id: str
-    title: str
-    description: str | None = None
-    status: str | None = "todo"
-    assignee: str | None = "User"
-    task_order: int | None = 0
-    feature: str | None = None
+    project_id: str = Field(..., description="Project UUID")
+    title: str = Field(..., min_length=1, max_length=200)
+    description: str | None = Field(None, max_length=4000)
+    status: str | None = Field("todo", min_length=2, max_length=30, pattern=r"^[a-z_]+$")
+    assignee: str | None = Field("User", min_length=1, max_length=100)
+    task_order: int | None = Field(0, ge=0, le=100000)
+    feature: str | None = Field(None, min_length=1, max_length=100)
+
+    @validator("project_id")
+    def validate_project_id(cls, v: str) -> str:
+        uuid_re = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+        if not isinstance(v, str) or not uuid_re.match(v):
+            raise ValueError("Invalid project_id format")
+        return v
+
+    @validator("status")
+    def validate_status(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        allowed = {"todo", "in_progress", "blocked", "done"}
+        if v not in allowed:
+            raise ValueError(f"Invalid status. Allowed: {', '.join(sorted(allowed))}")
+        return v
 
 
 @router.get("/projects")
@@ -254,7 +340,7 @@ async def projects_health():
 
 
 @router.get("/projects/{project_id}")
-async def get_project(project_id: str):
+async def get_project(project_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")):
     """Get a specific project."""
     try:
         logfire.info(f"Getting project | project_id={project_id}")
@@ -294,7 +380,10 @@ async def get_project(project_id: str):
 
 
 @router.put("/projects/{project_id}")
-async def update_project(project_id: str, request: UpdateProjectRequest):
+async def update_project(
+    project_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"),
+    request: UpdateProjectRequest,
+):
     """Update a project with comprehensive Logfire monitoring."""
     try:
         supabase_client = get_supabase_client()
@@ -408,7 +497,7 @@ async def update_project(project_id: str, request: UpdateProjectRequest):
 
 
 @router.delete("/projects/{project_id}")
-async def delete_project(project_id: str):
+async def delete_project(project_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")):
     """Delete a project and all its tasks."""
     try:
         logfire.info(f"Deleting project | project_id={project_id}")
@@ -443,7 +532,7 @@ async def delete_project(project_id: str):
 
 
 @router.get("/projects/{project_id}/features")
-async def get_project_features(project_id: str):
+async def get_project_features(project_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")):
     """Get features from a project's features JSONB field."""
     try:
         logfire.info(f"Getting project features | project_id={project_id}")
@@ -473,7 +562,10 @@ async def get_project_features(project_id: str):
 
 
 @router.get("/projects/{project_id}/tasks")
-async def list_project_tasks(project_id: str, include_archived: bool = False):
+async def list_project_tasks(
+    project_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"),
+    include_archived: bool = Query(False, description="Include archived tasks")
+):
     """List all tasks for a specific project. By default, filters out archived tasks."""
     try:
         logfire.info(
@@ -552,12 +644,12 @@ async def create_task(request: CreateTaskRequest):
 
 @router.get("/tasks")
 async def list_tasks(
-    status: str | None = None,
-    project_id: str | None = None,
-    include_closed: bool = False,
-    page: int = 1,
-    per_page: int = 50,
-    exclude_large_fields: bool = False,
+    status: str | None = Query(None, min_length=2, max_length=30, pattern=r"^[a-z_]+$"),
+    project_id: str | None = Query(None, pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"),
+    include_closed: bool = Query(False),
+    page: int = Query(1, ge=1, le=1000),
+    per_page: int = Query(50, ge=1, le=200),
+    exclude_large_fields: bool = Query(False),
 ):
     """List tasks with optional filters including status and project."""
     try:
@@ -610,7 +702,7 @@ async def list_tasks(
 
 
 @router.get("/tasks/{task_id}")
-async def get_task(task_id: str):
+async def get_task(task_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")):
     """Get a specific task by ID."""
     try:
         # Use TaskService to get the task
@@ -639,27 +731,60 @@ async def get_task(task_id: str):
 
 
 class UpdateTaskRequest(BaseModel):
-    title: str | None = None
-    description: str | None = None
-    status: str | None = None
-    assignee: str | None = None
-    task_order: int | None = None
-    feature: str | None = None
+    title: str | None = Field(None, min_length=1, max_length=200)
+    description: str | None = Field(None, max_length=4000)
+    status: str | None = Field(None, min_length=2, max_length=30, pattern=r"^[a-z_]+$")
+    assignee: str | None = Field(None, min_length=1, max_length=100)
+    task_order: int | None = Field(None, ge=0, le=100000)
+    feature: str | None = Field(None, min_length=1, max_length=100)
+
+    @validator("status")
+    def validate_status(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        allowed = {"todo", "in_progress", "blocked", "done"}
+        if v not in allowed:
+            raise ValueError(f"Invalid status. Allowed: {', '.join(sorted(allowed))}")
+        return v
 
 
 class CreateDocumentRequest(BaseModel):
-    document_type: str
-    title: str
+    document_type: str = Field(..., min_length=2, max_length=32, pattern=r"^[a-z][a-z0-9_-]{1,31}$")
+    title: str = Field(..., min_length=1, max_length=200)
     content: dict[str, Any] | None = None
     tags: list[str] | None = None
-    author: str | None = None
+    author: str | None = Field(None, min_length=1, max_length=100)
+
+    @validator("tags")
+    def validate_tags(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return v
+        if len(v) > 50:
+            raise ValueError("Too many tags (max 50)")
+        tag_re = re.compile(r"^[a-z0-9][a-z0-9_-]{0,29}$")
+        for t in v:
+            if not isinstance(t, str) or not tag_re.match(t):
+                raise ValueError("Invalid tag format")
+        return v
 
 
 class UpdateDocumentRequest(BaseModel):
-    title: str | None = None
+    title: str | None = Field(None, min_length=1, max_length=200)
     content: dict[str, Any] | None = None
     tags: list[str] | None = None
-    author: str | None = None
+    author: str | None = Field(None, min_length=1, max_length=100)
+
+    @validator("tags")
+    def validate_tags(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return v
+        if len(v) > 50:
+            raise ValueError("Too many tags (max 50)")
+        tag_re = re.compile(r"^[a-z0-9][a-z0-9_-]{0,29}$")
+        for t in v:
+            if not isinstance(t, str) or not tag_re.match(t):
+                raise ValueError("Invalid tag format")
+        return v
 
 
 class CreateVersionRequest(BaseModel):
@@ -720,7 +845,7 @@ async def update_task(task_id: str, request: UpdateTaskRequest):
 
 
 @router.delete("/tasks/{task_id}")
-async def delete_task(task_id: str):
+async def delete_task(task_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")):
     """Archive a task (soft delete) with real-time Socket.IO broadcasting."""
     try:
         # Use TaskService to archive the task
@@ -753,9 +878,16 @@ async def delete_task(task_id: str):
 
 
 @router.put("/mcp/tasks/{task_id}/status")
-async def mcp_update_task_status_with_socketio(task_id: str, status: str):
+async def mcp_update_task_status_with_socketio(
+    task_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"),
+    status: str = Query(..., min_length=2, max_length=30, pattern=r"^[a-z_]+$")
+):
     """Update task status via MCP tools with Socket.IO broadcasting using RAG pattern."""
     try:
+        # Enforce allowed statuses to protect data integrity
+        allowed = {"todo", "in_progress", "blocked", "done"}
+        if status not in allowed:
+            raise HTTPException(status_code=422, detail=f"Invalid status. Allowed: {', '.join(sorted(allowed))}")
         logfire.info(f"MCP task status update | task_id={task_id} | status={status}")
 
         # Use TaskService to update the task
@@ -795,7 +927,7 @@ async def mcp_update_task_status_with_socketio(task_id: str, status: str):
 
 
 @router.get("/projects/{project_id}/docs")
-async def list_project_documents(project_id: str):
+async def list_project_documents(project_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")):
     """List all documents for a specific project."""
     try:
         logfire.info(f"Listing documents for project | project_id={project_id}")
@@ -824,7 +956,10 @@ async def list_project_documents(project_id: str):
 
 
 @router.post("/projects/{project_id}/docs")
-async def create_project_document(project_id: str, request: CreateDocumentRequest):
+async def create_project_document(
+    project_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"),
+    request: CreateDocumentRequest,
+):
     """Create a new document for a project."""
     try:
         logfire.info(
@@ -862,7 +997,10 @@ async def create_project_document(project_id: str, request: CreateDocumentReques
 
 
 @router.get("/projects/{project_id}/docs/{doc_id}")
-async def get_project_document(project_id: str, doc_id: str):
+async def get_project_document(
+    project_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"),
+    doc_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"),
+):
     """Get a specific document from a project."""
     try:
         logfire.info(f"Getting document | project_id={project_id} | doc_id={doc_id}")
@@ -891,7 +1029,11 @@ async def get_project_document(project_id: str, doc_id: str):
 
 
 @router.put("/projects/{project_id}/docs/{doc_id}")
-async def update_project_document(project_id: str, doc_id: str, request: UpdateDocumentRequest):
+async def update_project_document(
+    project_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"),
+    doc_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"),
+    request: UpdateDocumentRequest,
+):
     """Update a document in a project."""
     try:
         logfire.info(f"Updating document | project_id={project_id} | doc_id={doc_id}")
@@ -931,7 +1073,10 @@ async def update_project_document(project_id: str, doc_id: str, request: UpdateD
 
 
 @router.delete("/projects/{project_id}/docs/{doc_id}")
-async def delete_project_document(project_id: str, doc_id: str):
+async def delete_project_document(
+    project_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"),
+    doc_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"),
+):
     """Delete a document from a project."""
     try:
         logfire.info(f"Deleting document | project_id={project_id} | doc_id={doc_id}")
@@ -963,7 +1108,10 @@ async def delete_project_document(project_id: str, doc_id: str):
 
 
 @router.get("/projects/{project_id}/versions")
-async def list_project_versions(project_id: str, field_name: str = None):
+async def list_project_versions(
+    project_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"),
+    field_name: str | None = Query(None, pattern=r"^(docs|features|data)$")
+):
     """List version history for a project's JSONB fields."""
     try:
         logfire.info(
@@ -994,7 +1142,10 @@ async def list_project_versions(project_id: str, field_name: str = None):
 
 
 @router.post("/projects/{project_id}/versions")
-async def create_project_version(project_id: str, request: CreateVersionRequest):
+async def create_project_version(
+    project_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"),
+    request: CreateVersionRequest,
+):
     """Create a version snapshot for a project's JSONB field."""
     try:
         logfire.info(
@@ -1033,7 +1184,11 @@ async def create_project_version(project_id: str, request: CreateVersionRequest)
 
 
 @router.get("/projects/{project_id}/versions/{field_name}/{version_number}")
-async def get_project_version(project_id: str, field_name: str, version_number: int):
+async def get_project_version(
+    project_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"),
+    field_name: str = Path(..., pattern=r"^(docs|features|data)$"),
+    version_number: int = Path(..., ge=1, le=1000000),
+):
     """Get a specific version's content."""
     try:
         logfire.info(

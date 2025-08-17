@@ -15,16 +15,22 @@ Endpoints:
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel
 
 from ..services.circuit_breaker_monitor import get_circuit_breaker_monitor
 from ..services.mcp_http_client import get_mcp_http_client
+from ..middleware.auth_middleware import require_authentication
+from ..config.security_config import require_admin
 
 logger = logging.getLogger(__name__)
 
-# Create the monitoring router
-monitoring_router = APIRouter(prefix="/api/monitoring", tags=["monitoring"])
+# Create the monitoring router (auth required for all monitoring routes)
+monitoring_router = APIRouter(
+    prefix="/api/monitoring",
+    tags=["monitoring"],
+    dependencies=[Depends(require_authentication)]
+)
 
 
 class HealthSummaryResponse(BaseModel):
@@ -57,7 +63,7 @@ class PerformanceMetricsResponse(BaseModel):
     history_points: int
 
 
-@monitoring_router.get("/circuit-breakers", response_model=Dict[str, Any])
+@monitoring_router.get("/circuit-breakers", response_model=Dict[str, Any], dependencies=[Depends(require_admin)])
 async def get_circuit_breaker_status():
     """
     Get current circuit breaker states and health information.
@@ -106,7 +112,7 @@ async def get_circuit_breaker_status():
         raise HTTPException(status_code=500, detail=f"Failed to get circuit breaker status: {str(e)}")
 
 
-@monitoring_router.get("/alerts", response_model=Dict[str, Any])
+@monitoring_router.get("/alerts", response_model=Dict[str, Any], dependencies=[Depends(require_admin)])
 async def get_monitoring_alerts(
     service_name: Optional[str] = Query(None, description="Filter alerts by service name"),
     level: Optional[str] = Query(None, description="Filter alerts by level (info, warning, critical, emergency)"),
@@ -164,7 +170,7 @@ async def get_monitoring_alerts(
         raise HTTPException(status_code=500, detail=f"Failed to get alerts: {str(e)}")
 
 
-@monitoring_router.get("/performance", response_model=Dict[str, Any])
+@monitoring_router.get("/performance", response_model=Dict[str, Any], dependencies=[Depends(require_admin)])
 async def get_performance_metrics(
     service_name: Optional[str] = Query(None, description="Get metrics for specific service"),
     include_history: bool = Query(False, description="Include historical performance data")
@@ -248,7 +254,7 @@ async def get_system_health_summary():
         raise HTTPException(status_code=500, detail=f"Failed to get health summary: {str(e)}")
 
 
-@monitoring_router.get("/mcp-metrics", response_model=Dict[str, Any])
+@monitoring_router.get("/mcp-metrics", response_model=Dict[str, Any], dependencies=[Depends(require_admin)])
 async def get_mcp_detailed_metrics():
     """
     Get detailed MCP HTTP client metrics.
@@ -291,7 +297,7 @@ async def get_mcp_detailed_metrics():
         raise HTTPException(status_code=500, detail=f"Failed to get MCP metrics: {str(e)}")
 
 
-@monitoring_router.post("/reset-alerts", response_model=Dict[str, Any])
+@monitoring_router.post("/reset-alerts", response_model=Dict[str, Any], dependencies=[Depends(require_admin)])
 async def reset_monitoring_alerts():
     """
     Reset/clear all active monitoring alerts.

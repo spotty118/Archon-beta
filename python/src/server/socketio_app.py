@@ -11,19 +11,18 @@ import socketio
 from fastapi import FastAPI
 
 from .config.logfire_config import safe_logfire_info
+from .config.security_config import get_security_settings
 
 logger = logging.getLogger(__name__)
 
 # Create Socket.IO server with FastAPI integration
+security_settings = get_security_settings()
+allowed_origins = security_settings.allowed_origins or "*"
 sio = socketio.AsyncServer(
     async_mode="asgi",
-    cors_allowed_origins="*",  # TODO: Configure for production with specific origins
+    cors_allowed_origins=allowed_origins,
     logger=False,  # Disable verbose Socket.IO logging
-    engineio_logger=False,  # Disable verbose Engine.IO logging
-    # Performance settings for long-running operations
-    max_http_buffer_size=1000000,  # 1MB
-    ping_timeout=300,  # 5 minutes - increased for background tasks
-    ping_interval=60,  # 1 minute - check connection every minute
+    engineio_logger=False,
 )
 
 # Global Socket.IO instance for use across modules
@@ -50,7 +49,7 @@ def create_socketio_app(app: FastAPI) -> socketio.ASGIApp:
     """
     # Log Socket.IO server creation
     safe_logfire_info(
-        "Creating Socket.IO server", cors_origins="*", ping_timeout=300, ping_interval=60
+        "Creating Socket.IO server", cors_origins=allowed_origins, ping_timeout=300, ping_interval=60
     )
 
     # Note: Socket.IO event handlers are registered in socketio_handlers.py

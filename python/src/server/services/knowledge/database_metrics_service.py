@@ -57,7 +57,8 @@ class DatabaseMetricsService:
                 metrics["code_examples_count"] = (
                     code_examples_result.count if code_examples_result.count else 0
                 )
-            except:
+            except Exception as e:
+                safe_logfire_error(f"Failed to get code examples count for metrics: {e}")
                 metrics["code_examples_count"] = 0
 
             # Add timestamp

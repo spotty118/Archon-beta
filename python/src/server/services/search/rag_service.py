@@ -77,13 +77,19 @@ class RAGService:
                     if encrypted_value:
                         try:
                             return credential_service._decrypt_value(encrypted_value)
-                        except Exception:
-                            pass
+                        except ValueError as e:
+                            logger.warning(f"Failed to decrypt setting {key}: {e}")
+                        except Exception as e:
+                            logger.warning(f"Unexpected error decrypting setting {key}: {e}")
                 elif cached_value:
                     return str(cached_value)
             # Fallback to environment variable
             return os.getenv(key, default)
-        except Exception:
+        except ImportError as e:
+            logger.debug(f"Credential service not available for {key}, using environment variable: {e}")
+            return os.getenv(key, default)
+        except Exception as e:
+            logger.warning(f"Failed to retrieve setting {key} from credential service: {e}")
             return os.getenv(key, default)
 
     def get_bool_setting(self, key: str, default: bool = False) -> bool:

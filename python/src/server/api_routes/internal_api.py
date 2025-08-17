@@ -50,6 +50,47 @@ def is_internal_request(request: Request) -> bool:
 
     return False
 
+async def _get_expected_internal_token() -> str | None:
+    """Resolve expected internal token from credentials or environment."""
+    try:
+        token = await credential_service.get_credential("INTERNAL_SERVICE_TOKEN", decrypt=True)
+        if token:
+            return str(token)
+    except Exception:
+        # Fallback to environment if credential not available
+        pass
+    return os.getenv("INTERNAL_SERVICE_TOKEN")
+
+def _extract_presented_token(request: Request) -> str | None:
+    """Extract token from X-Internal-Token or Authorization: Bearer headers."""
+    hdr = request.headers.get("X-Internal-Token")
+    if hdr:
+        return hdr.strip()
+    auth = request.headers.get("Authorization", "")
+    if auth.lower().startswith("bearer "):
+        return auth.split(" ", 1)[1].strip()
+    return None
+
+async def ensure_internal_auth(request: Request) -> None:
+    """
+    Enforce internal auth policy:
+    - If INTERNAL_SERVICE_TOKEN is configured, require matching token (from header).
+    - If no token configured, require internal network request.
+    """
+    expected = await _get_expected_internal_token()
+    if expected:
+        presented = _extract_presented_token(request)
+        if not presented or presented != expected:
+            logger.warning("Unauthorized internal access: missing/invalid internal token")
+            raise HTTPException(status_code=403, detail="Access forbidden")
+        # Optional: you could also enforce internal IP in addition to token here if desired.
+        return
+
+    # No token configured; fall back to internal IP check
+    if not is_internal_request(request):
+        logger.warning("Unauthorized internal access: external IP without internal token configured")
+        raise HTTPException(status_code=403, detail="Access forbidden")
+
 
 @router.get("/health")
 async def internal_health():
@@ -66,10 +107,7 @@ async def get_agent_credentials(request: Request) -> dict[str, Any]:
     the necessary credentials for AI agents to function.
     """
     # Check if request is from internal source
-    if not is_internal_request(request):
-        logger.warning(f"Unauthorized access to internal credentials from {request.client.host}")
-        raise HTTPException(status_code=403, detail="Access forbidden")
-
+    await ensure_internal_auth(request)
     try:
         # Get credentials needed by agents
         credentials = {
@@ -122,10 +160,7 @@ async def get_mcp_credentials(request: Request) -> dict[str, Any]:
     This endpoint provides credentials for the MCP service if needed in the future.
     """
     # Check if request is from internal source
-    if not is_internal_request(request):
-        logger.warning(f"Unauthorized access to internal credentials from {request.client.host}")
-        raise HTTPException(status_code=403, detail="Access forbidden")
-
+    await ensure_internal_auth(request)
     try:
         credentials = {
             # MCP might need some credentials in the future

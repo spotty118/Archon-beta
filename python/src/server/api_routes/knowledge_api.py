@@ -15,8 +15,9 @@ import time
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query, Path
+from pydantic import BaseModel, Field, HttpUrl, validator
+from typing import Annotated
 
 from ..utils import get_supabase_client
 from ..services.storage import DocumentStorageService
@@ -24,6 +25,7 @@ from ..services.search.rag_service import RAGService
 from ..services.knowledge import KnowledgeItemService, DatabaseMetricsService
 from ..services.crawling import CrawlOrchestrationService
 from ..services.crawler_manager import get_crawler
+from ..utils.document_processing import extract_text_from_document
 
 # Import unified logging
 from ..config.logfire_config import get_logger, safe_logfire_error, safe_logfire_info
@@ -32,6 +34,7 @@ from ..services.search.rag_service import RAGService
 from ..services.storage import DocumentStorageService
 from ..utils import get_supabase_client
 from ..utils.document_processing import extract_text_from_document
+from ..middleware.auth_middleware import require_authentication
 
 # Get logger for this module
 logger = get_logger(__name__)
@@ -44,7 +47,7 @@ from .socketio_handlers import (
 )
 
 # Create router
-router = APIRouter(prefix="/api", tags=["knowledge"])
+router = APIRouter(prefix="/api", tags=["knowledge"], dependencies=[Depends(require_authentication)])
 
 # Get Socket.IO instance
 sio = get_socketio_instance()
@@ -58,14 +61,53 @@ crawl_semaphore = asyncio.Semaphore(CONCURRENT_CRAWL_LIMIT)
 active_crawl_tasks: dict[str, asyncio.Task] = {}
 
 
-# Request Models
+# Request Models with comprehensive validation
 class KnowledgeItemRequest(BaseModel):
-    url: str
-    knowledge_type: str = "technical"
-    tags: list[str] = []
-    update_frequency: int = 7
-    max_depth: int = 2  # Maximum crawl depth (1-5)
-    extract_code_examples: bool = True  # Whether to extract code examples
+    url: HttpUrl = Field(..., description="Valid HTTP/HTTPS URL to crawl")
+    knowledge_type: str = Field(
+        default="technical",
+        min_length=1,
+        max_length=50,
+        regex="^[a-zA-Z][a-zA-Z0-9_-]*$",
+        description="Knowledge type (alphanumeric, underscore, hyphen)"
+    )
+    tags: list[str] = Field(
+        default_factory=list,
+        max_items=10,
+        description="List of tags (max 10)"
+    )
+    update_frequency: int = Field(
+        default=7,
+        ge=1,
+        le=365,
+        description="Update frequency in days (1-365)"
+    )
+    max_depth: int = Field(
+        default=2,
+        ge=1,
+        le=5,
+        description="Maximum crawl depth (1-5)"
+    )
+    extract_code_examples: bool = Field(
+        default=True,
+        description="Whether to extract code examples"
+    )
+
+    @validator('tags', each_item=True)
+    def validate_tags(cls, tag):
+        if not tag or len(tag.strip()) == 0:
+            raise ValueError("Tags cannot be empty")
+        if len(tag) > 100:
+            raise ValueError("Tag length cannot exceed 100 characters")
+        if not tag.replace('-', '').replace('_', '').replace(' ', '').isalnum():
+            raise ValueError("Tags can only contain alphanumeric characters, spaces, hyphens, and underscores")
+        return tag.strip()
+
+    @validator('url')
+    def validate_url_scheme(cls, url):
+        if url.scheme not in ['http', 'https']:
+            raise ValueError("URL must use HTTP or HTTPS protocol")
+        return url
 
     class Config:
         schema_extra = {
@@ -81,17 +123,115 @@ class KnowledgeItemRequest(BaseModel):
 
 
 class CrawlRequest(BaseModel):
-    url: str
-    knowledge_type: str = "general"
-    tags: list[str] = []
-    update_frequency: int = 7
-    max_depth: int = 2  # Maximum crawl depth (1-5)
+    url: HttpUrl = Field(..., description="Valid HTTP/HTTPS URL to crawl")
+    knowledge_type: str = Field(
+        default="general",
+        min_length=1,
+        max_length=50,
+        regex="^[a-zA-Z][a-zA-Z0-9_-]*$",
+        description="Knowledge type"
+    )
+    tags: list[str] = Field(
+        default_factory=list,
+        max_items=10,
+        description="List of tags"
+    )
+    update_frequency: int = Field(
+        default=7,
+        ge=1,
+        le=365,
+        description="Update frequency in days"
+    )
+    max_depth: int = Field(
+        default=2,
+        ge=1,
+        le=5,
+        description="Maximum crawl depth"
+    )
+
+    @validator('tags', each_item=True)
+    def validate_tags(cls, tag):
+        if not tag or len(tag.strip()) == 0:
+            raise ValueError("Tags cannot be empty")
+        if len(tag) > 100:
+            raise ValueError("Tag length cannot exceed 100 characters")
+        return tag.strip()
 
 
 class RagQueryRequest(BaseModel):
-    query: str
-    source: str | None = None
-    match_count: int = 5
+    query: str = Field(
+        ...,
+        min_length=1,
+        max_length=1000,
+        description="Search query (1-1000 characters)"
+    )
+    source: str | None = Field(
+        default=None,
+        max_length=200,
+        description="Optional source filter"
+    )
+    match_count: int = Field(
+        default=5,
+        ge=1,
+        le=50,
+        description="Number of matches to return (1-50)"
+    )
+
+    @validator('query')
+    def validate_query(cls, query):
+        if not query.strip():
+            raise ValueError("Query cannot be empty or only whitespace")
+        return query.strip()
+
+
+class KnowledgeItemUpdateRequest(BaseModel):
+    title: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=200,
+        description="Knowledge item title"
+    )
+    url: HttpUrl | None = Field(
+        default=None,
+        description="Valid HTTP/HTTPS URL"
+    )
+    tags: list[str] | None = Field(
+        default=None,
+        max_items=10,
+        description="List of tags"
+    )
+    metadata: dict | None = Field(
+        default=None,
+        description="Additional metadata"
+    )
+    knowledge_type: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=50,
+        regex="^[a-zA-Z][a-zA-Z0-9_-]*$",
+        description="Knowledge type"
+    )
+    update_frequency: int | None = Field(
+        default=None,
+        ge=1,
+        le=365,
+        description="Update frequency in days"
+    )
+    max_depth: int | None = Field(
+        default=None,
+        ge=1,
+        le=5,
+        description="Maximum crawl depth"
+    )
+
+    @validator('tags', each_item=True)
+    def validate_tags(cls, tag):
+        if tag is not None:
+            if not tag or len(tag.strip()) == 0:
+                raise ValueError("Tags cannot be empty")
+            if len(tag) > 100:
+                raise ValueError("Tag length cannot exceed 100 characters")
+        return tag.strip() if tag else tag
 
 
 @router.get("/test-socket-progress/{progress_id}")
@@ -123,8 +263,25 @@ async def test_socket_progress(progress_id: str):
 async def get_knowledge_sources():
     """Get all available knowledge sources."""
     try:
-        # Return empty list for now to pass the test
-        # In production, this would query the database
+        # Use KnowledgeItemService to fetch actual sources
+        service = KnowledgeItemService(get_supabase_client())
+        result = await service.get_available_sources()
+
+        # If service returns a dict with success flag and sources list
+        if isinstance(result, dict):
+            if result.get("success") is False:
+                raise HTTPException(status_code=500, detail={"error": result.get("error", "Failed to get sources")})
+            sources = result.get("sources")
+            if isinstance(sources, list):
+                return sources
+            # If dict but no 'sources' key, fallback to empty list
+            return []
+
+        # If service returned a list directly
+        if isinstance(result, list):
+            return result
+
+        # Fallback
         return []
     except Exception as e:
         safe_logfire_error(f"Failed to get knowledge sources | error={str(e)}")
@@ -133,7 +290,10 @@ async def get_knowledge_sources():
 
 @router.get("/knowledge-items")
 async def get_knowledge_items(
-    page: int = 1, per_page: int = 20, knowledge_type: str | None = None, search: str | None = None
+    page: Annotated[int, Query(ge=1, le=1000, description="Page number")] = 1,
+    per_page: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
+    knowledge_type: Annotated[str | None, Query(max_length=50, regex="^[a-zA-Z][a-zA-Z0-9_-]*$", description="Filter by knowledge type")] = None,
+    search: Annotated[str | None, Query(max_length=200, description="Search query")] = None
 ):
     """Get knowledge items with pagination and filtering."""
     try:
@@ -152,12 +312,16 @@ async def get_knowledge_items(
 
 
 @router.put("/knowledge-items/{source_id}")
-async def update_knowledge_item(source_id: str, updates: dict):
+async def update_knowledge_item(
+    source_id: Annotated[str, Path(min_length=1, max_length=100, description="Knowledge item ID")],
+    updates: KnowledgeItemUpdateRequest
+):
     """Update a knowledge item's metadata."""
     try:
         # Use KnowledgeItemService
         service = KnowledgeItemService(get_supabase_client())
-        success, result = await service.update_item(source_id, updates)
+        payload = updates.model_dump(exclude_none=True)
+        success, result = await service.update_item(source_id, payload)
 
         if success:
             return result
@@ -177,7 +341,9 @@ async def update_knowledge_item(source_id: str, updates: dict):
 
 
 @router.delete("/knowledge-items/{source_id}")
-async def delete_knowledge_item(source_id: str):
+async def delete_knowledge_item(
+    source_id: Annotated[str, Path(min_length=1, max_length=100, description="Knowledge item ID")]
+):
     """Delete a knowledge item from the database."""
     try:
         logger.debug(f"Starting delete_knowledge_item for source_id: {source_id}")

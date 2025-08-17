@@ -10,30 +10,126 @@ Handles:
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, Depends, Query, Path
+from pydantic import BaseModel, Field, validator
+from typing import Annotated
 
 # Import logging
 from ..config.logfire_config import logfire
 from ..services.credential_service import credential_service, initialize_credentials
 from ..utils import get_supabase_client
+from ..middleware.auth_middleware import require_authentication
 
-router = APIRouter(prefix="/api", tags=["settings"])
+router = APIRouter(prefix="/api", tags=["settings"], dependencies=[Depends(require_authentication)])
 
 
 class CredentialRequest(BaseModel):
-    key: str
-    value: str
-    is_encrypted: bool = False
-    category: str | None = None
-    description: str | None = None
+    key: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        regex="^[A-Z][A-Z0-9_]*$",
+        description="Credential key (uppercase, alphanumeric, underscores)"
+    )
+    value: str = Field(
+        ...,
+        min_length=1,
+        max_length=10000,
+        description="Credential value (1-10000 characters)"
+    )
+    is_encrypted: bool = Field(
+        default=False,
+        description="Whether to encrypt the credential value"
+    )
+    category: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=50,
+        regex="^[a-zA-Z][a-zA-Z0-9_-]*$",
+        description="Credential category (alphanumeric, underscore, hyphen)"
+    )
+    description: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Optional description of the credential"
+    )
+
+    @validator('key')
+    def validate_key_format(cls, key):
+        # Additional validation for common credential key patterns
+        if not key.strip():
+            raise ValueError("Credential key cannot be empty")
+        
+        # Check for reserved/dangerous key patterns
+        dangerous_patterns = ['__', 'SYSTEM_', 'ROOT_', 'ADMIN_', 'SECRET_']
+        if any(pattern in key for pattern in dangerous_patterns):
+            raise ValueError(f"Credential key contains reserved pattern: {key}")
+        
+        return key.strip()
+
+    @validator('value')
+    def validate_value_content(cls, value):
+        if not value.strip():
+            raise ValueError("Credential value cannot be empty")
+        
+        # Check for potentially dangerous content
+        if value.strip().startswith('javascript:') or value.strip().startswith('data:'):
+            raise ValueError("Credential value contains potentially unsafe content")
+        
+        return value
+
+    @validator('description')
+    def validate_description(cls, description):
+        if description is not None and description.strip():
+            # Remove excessive whitespace
+            description = " ".join(description.split())
+            if len(description) == 0:
+                return None
+        return description
 
 
 class CredentialUpdateRequest(BaseModel):
-    value: str
-    is_encrypted: bool | None = None
-    category: str | None = None
-    description: str | None = None
+    value: str = Field(
+        ...,
+        min_length=1,
+        max_length=10000,
+        description="Updated credential value"
+    )
+    is_encrypted: bool | None = Field(
+        default=None,
+        description="Whether to encrypt the credential value"
+    )
+    category: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=50,
+        regex="^[a-zA-Z][a-zA-Z0-9_-]*$",
+        description="Credential category"
+    )
+    description: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Optional description"
+    )
+
+    @validator('value')
+    def validate_value_content(cls, value):
+        if not value.strip():
+            raise ValueError("Credential value cannot be empty")
+        
+        # Check for potentially dangerous content
+        if value.strip().startswith('javascript:') or value.strip().startswith('data:'):
+            raise ValueError("Credential value contains potentially unsafe content")
+        
+        return value
+
+    @validator('description')
+    def validate_description(cls, description):
+        if description is not None and description.strip():
+            description = " ".join(description.split())
+            if len(description) == 0:
+                return None
+        return description
 
 
 class CredentialResponse(BaseModel):
@@ -43,7 +139,9 @@ class CredentialResponse(BaseModel):
 
 # Credential Management Endpoints
 @router.get("/credentials")
-async def list_credentials(category: str | None = None):
+async def list_credentials(
+    category: Annotated[str | None, Query(max_length=50, regex="^[a-zA-Z][a-zA-Z0-9_-]*$", description="Filter by credential category")] = None
+):
     """List all credentials and their categories."""
     try:
         logfire.info(f"Listing credentials | category={category}")
@@ -75,7 +173,9 @@ async def list_credentials(category: str | None = None):
 
 
 @router.get("/credentials/categories/{category}")
-async def get_credentials_by_category(category: str):
+async def get_credentials_by_category(
+    category: Annotated[str, Path(min_length=1, max_length=50, regex="^[a-zA-Z][a-zA-Z0-9_-]*$", description="Credential category")]
+):
     """Get all credentials for a specific category."""
     try:
         logfire.info(f"Getting credentials by category | category={category}")
@@ -139,7 +239,10 @@ OPTIONAL_SETTINGS_WITH_DEFAULTS = {
 
 
 @router.get("/credentials/{key}")
-async def get_credential(key: str, decrypt: bool = True):
+async def get_credential(
+    key: Annotated[str, Path(min_length=1, max_length=100, regex="^[A-Z][A-Z0-9_]*$", description="Credential key")],
+    decrypt: Annotated[bool, Query(description="Whether to decrypt the credential value")] = True
+):
     """Get a specific credential by key."""
     try:
         logfire.info(f"Getting credential | key={key} | decrypt={decrypt}")
@@ -182,7 +285,10 @@ async def get_credential(key: str, decrypt: bool = True):
 
 
 @router.put("/credentials/{key}")
-async def update_credential(key: str, request: dict[str, Any]):
+async def update_credential(
+    key: Annotated[str, Path(min_length=1, max_length=100, regex="^[A-Z][A-Z0-9_]*$", description="Credential key")],
+    request: dict[str, Any]
+):
     """Update an existing credential."""
     try:
         logfire.info(f"Updating credential | key={key}")
@@ -242,7 +348,9 @@ async def update_credential(key: str, request: dict[str, Any]):
 
 
 @router.delete("/credentials/{key}")
-async def delete_credential(key: str):
+async def delete_credential(
+    key: Annotated[str, Path(min_length=1, max_length=100, regex="^[A-Z][A-Z0-9_]*$", description="Credential key")]
+):
     """Delete a credential."""
     try:
         logfire.info(f"Deleting credential | key={key}")

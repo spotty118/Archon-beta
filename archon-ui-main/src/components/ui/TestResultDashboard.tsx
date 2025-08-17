@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  TestTube, 
-  CheckCircle, 
-  XCircle, 
-  Clock, 
-  Activity, 
-  TrendingUp, 
+import {
+  TestTube,
+  CheckCircle,
+  XCircle,
+  Clock,
+  Activity,
+  TrendingUp,
   RefreshCw,
   BarChart,
   AlertTriangle,
@@ -14,6 +14,7 @@ import {
   Zap
 } from 'lucide-react';
 import { CoverageVisualization, CoverageData } from './CoverageVisualization';
+import { useConditionalPolling } from '../../hooks/useSmartPolling';
 import { testService } from '../../services/testService';
 
 export interface TestResults {
@@ -331,13 +332,13 @@ export const TestResultDashboard: React.FC<TestResultDashboardProps> = ({
     loadTestData();
   }, [showCoverage]);
 
-  // Auto-refresh
-  useEffect(() => {
-    if (!refreshInterval) return;
-
-    const interval = setInterval(loadTestData, refreshInterval * 1000);
-    return () => clearInterval(interval);
-  }, [refreshInterval, showCoverage]);
+  // Smart auto-refresh using conditional polling
+  useConditionalPolling(!!refreshInterval, {
+    pollFunction: loadTestData,
+    baseInterval: (refreshInterval || 30) * 1000,
+    immediate: false,
+    respectHighFrequencyPolling: true
+  });
 
   return (
     <div className={`space-y-6 ${className}`}>

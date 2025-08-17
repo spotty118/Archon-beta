@@ -150,13 +150,65 @@ app = FastAPI(
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
+    """Enhanced health check endpoint with detailed status"""
+    from datetime import datetime
+    
+    # Check if agents are initialized
+    agents_initialized = hasattr(app.state, 'agents') and len(app.state.agents) > 0
+    
+    # Count initialized agents
+    initialized_agents = {}
+    failed_agents = []
+    
+    if agents_initialized:
+        for name, agent in app.state.agents.items():
+            try:
+                # Basic agent health check
+                agent_info = {
+                    "name": agent.name,
+                    "model": getattr(agent, 'model', 'unknown'),
+                    "status": "healthy"
+                }
+                initialized_agents[name] = agent_info
+            except Exception as e:
+                failed_agents.append({"name": name, "error": str(e)})
+    
+    # Overall health status
+    overall_status = "healthy" if agents_initialized and len(failed_agents) == 0 else "degraded"
+    if not agents_initialized:
+        overall_status = "initializing"
+    
+    # Check credentials availability
+    credentials_available = len(AGENT_CREDENTIALS) > 0
+    
     return {
-        "status": "healthy",
-        "service": "agents",
-        "agents_available": list(AVAILABLE_AGENTS.keys()),
-        "note": "This service only hosts PydanticAI agents",
+        "status": overall_status,
+        "service": "archon-agents",
+        "timestamp": datetime.now().isoformat(),
+        "ready": agents_initialized,
+        "agents": {
+            "available_types": list(AVAILABLE_AGENTS.keys()),
+            "initialized": initialized_agents,
+            "failed": failed_agents,
+            "total_initialized": len(initialized_agents),
+            "total_failed": len(failed_agents)
+        },
+        "credentials": {
+            "fetched": credentials_available,
+            "count": len(AGENT_CREDENTIALS)
+        },
+        "capabilities": [
+            "PydanticAI agent hosting",
+            "Streaming responses via SSE",
+            "MCP tool integration"
+        ]
     }
+
+
+@app.get("/api/health")
+async def api_health_check():
+    """API health check endpoint - alias for /health"""
+    return await health_check()
 
 
 @app.post("/agents/run", response_model=AgentResponse)

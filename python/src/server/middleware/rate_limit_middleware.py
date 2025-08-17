@@ -49,14 +49,22 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             "/api/auth/logout": {"requests": 10, "window": 60, "burst": 3},
             
             # File upload endpoints - moderate limits
-            "/api/knowledge/upload": {"requests": 20, "window": 300, "burst": 5},  # 20 per 5 minutes
-            "/api/knowledge/crawl": {"requests": 10, "window": 600, "burst": 2},   # 10 per 10 minutes
+            # Legacy mappings (kept for backward compatibility)
+            "/api/knowledge/upload": {"requests": 20, "window": 300, "burst": 5},  # legacy
+            "/api/knowledge/crawl": {"requests": 10, "window": 600, "burst": 2},   # legacy
+            # Current endpoints
+            "/api/documents/upload": {"requests": 20, "window": 300, "burst": 5},  # 20 per 5 minutes
+            "/api/knowledge-items/crawl": {"requests": 10, "window": 600, "burst": 2},  # 10 per 10 minutes
+            "/api/knowledge-items/refresh": {"requests": 10, "window": 600, "burst": 2},  # 10 per 10 minutes
             
             # Read operations - higher limits
             "/api/projects": {"requests": 200, "window": 60, "burst": 50},        # 200 per minute
-            "/api/knowledge": {"requests": 200, "window": 60, "burst": 50},       # 200 per minute
+            "/api/knowledge": {"requests": 200, "window": 60, "burst": 50},       # 200 per minute (legacy grouping)
+            "/api/knowledge-items": {"requests": 200, "window": 60, "burst": 50}, # 200 per minute
+            "/api/documents": {"requests": 200, "window": 60, "burst": 50},       # 200 per minute
             "/api/tasks": {"requests": 200, "window": 60, "burst": 50},           # 200 per minute
             "/api/mcp": {"requests": 100, "window": 60, "burst": 25},             # 100 per minute
+            "/api/agent-chat": {"requests": 60, "window": 300, "burst": 20},      # 60 per 5 minutes
             
             # Write operations - moderate limits
             "/api/projects/create": {"requests": 30, "window": 300, "burst": 10}, # 30 per 5 minutes
@@ -283,10 +291,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         """Check rate limit using in-memory storage."""
         async with self.lock:
             # Clean old entries
-            window_start = current_time - window
             requests = self.memory_storage[key]
             
-            while requests and requests[0] < window_start:
+            while requests and requests[0] < current_time - window:
                 requests.popleft()
             
             current_count = len(requests)
@@ -359,6 +366,22 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         method = request.method
         
+        # High-cost knowledge operations normalization first
+        # Explicit crawl endpoint
+        if method in ["POST"] and path == "/api/knowledge-items/crawl":
+            return "/api/knowledge-items/crawl"
+        # Explicit refresh endpoint (parameterized path endswith /refresh)
+        if method in ["POST"] and path.endswith("/refresh") and path.startswith("/api/knowledge-items/"):
+            return "/api/knowledge-items/refresh"
+        # Knowledge items grouping (reads and other operations)
+        if path.startswith("/api/knowledge-items/"):
+            return "/api/knowledge-items"
+        # Documents grouping and upload
+        if path.startswith("/api/documents"):
+            if method in ["POST"] and path == "/api/documents/upload":
+                return "/api/documents/upload"
+            return "/api/documents"
+        
         # Handle parameterized routes
         if path.startswith("/api/projects/") and len(path.split("/")) > 3:
             return "/api/projects"
@@ -368,6 +391,17 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return "/api/tasks"
         elif path.startswith("/api/mcp/") and len(path.split("/")) > 3:
             return "/api/mcp"
+        elif path.startswith("/api/agent-chat/"):
+            return "/api/agent-chat"
+        elif path.startswith("/api/agent-chat"):
+            return "/api/agent-chat"
+        
+        # Explicit normalization for known heavy POST routes
+        if method in ["POST"]:
+            if path == "/api/knowledge-items/crawl":
+                return "/api/knowledge-items/crawl"
+            if path == "/api/documents/upload":
+                return "/api/documents/upload"
         
         # Handle method-specific endpoints
         if method in ["POST", "PUT", "PATCH"]:

@@ -3,6 +3,7 @@ import { Server, Activity, Clock, ChevronRight, Hammer, Settings, Trash2, Plug, 
 import { Client } from './MCPClients';
 import { mcpClientService } from '../../services/mcpClientService';
 import { useToast } from '../../contexts/ToastContext';
+import { useSettings } from '../../contexts/SettingsContext';
 
 interface ClientCardProps {
   client: Client;
@@ -24,6 +25,7 @@ export const ClientCard = ({
   const [isConnecting, setIsConnecting] = useState(false);
   const particlesRef = useRef<HTMLDivElement>(null);
   const { showToast } = useToast();
+  const { enableHighFidelityAnimations } = useSettings();
 
   // Special styling for Archon client
   const isArchonClient = client.name.includes('Archon') || client.name.includes('archon');
@@ -55,7 +57,7 @@ export const ClientCard = ({
 
   // Handle mouse movement for bioluminescent effect
   useEffect(() => {
-    if (!isArchonClient || !particlesRef.current) return;
+    if (!isArchonClient || !particlesRef.current || !enableHighFidelityAnimations) return;
 
     const currentMousePos = { x: 0, y: 0 };
     const glowOrganisms: HTMLDivElement[] = [];
@@ -194,7 +196,7 @@ export const ClientCard = ({
       cardElement.removeEventListener('mouseleave', handleMouseLeave);
       clearInterval(ambientInterval);
     };
-  }, [isArchonClient]);
+  }, [isArchonClient, enableHighFidelityAnimations]);
 
   const currentStatus = statusConfig[client.status];
 
@@ -252,14 +254,14 @@ export const ClientCard = ({
           ref={isArchonClient ? particlesRef : undefined}
         >
           {/* Particle container for Archon client */}
-          {isArchonClient && (
+          {isArchonClient && enableHighFidelityAnimations && (
             <div className="absolute inset-0 rounded-xl overflow-hidden pointer-events-none">
               <div className="particles-container"></div>
             </div>
           )}
 
           {/* Subtle aurora glow effect for Archon client */}
-          {isArchonClient && (
+          {isArchonClient && enableHighFidelityAnimations && (
             <div className="absolute inset-0 rounded-xl overflow-hidden opacity-20">
               <div className="absolute -inset-[100px] bg-[radial-gradient(circle,rgba(59,130,246,0.8)_0%,rgba(168,85,247,0.6)_40%,transparent_70%)] blur-3xl animate-[pulse_8s_ease-in-out_infinite]"></div>
             </div>

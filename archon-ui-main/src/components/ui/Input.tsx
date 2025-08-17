@@ -9,8 +9,10 @@ export const Input: React.FC<InputProps> = ({
   icon,
   label,
   className = '',
+  id,
   ...props
 }) => {
+  const inputId = id || (label ? label.replace(/\s+/g, '-').toLowerCase() : undefined);
   const accentColorMap = {
     purple: 'focus-within:border-purple-500 focus-within:shadow-[0_0_15px_rgba(168,85,247,0.5)]',
     green: 'focus-within:border-emerald-500 focus-within:shadow-[0_0_15px_rgba(16,185,129,0.5)]',
@@ -18,7 +20,7 @@ export const Input: React.FC<InputProps> = ({
     blue: 'focus-within:border-blue-500 focus-within:shadow-[0_0_15px_rgba(59,130,246,0.5)]'
   };
   return <div className="w-full">
-      {label && <label className="block text-gray-600 dark:text-zinc-400 text-sm mb-1.5">
+      {label && <label htmlFor={inputId} className="block text-gray-600 dark:text-zinc-400 text-sm mb-1.5">
           {label}
         </label>}
       <div className={`
@@ -27,10 +29,14 @@ export const Input: React.FC<InputProps> = ({
         transition-all duration-200 ${accentColorMap[accentColor]}
       `}>
         {icon && <div className="mr-2 text-gray-500 dark:text-zinc-500">{icon}</div>}
-        <input className={`
+        <input
+          id={inputId}
+          className={`
             w-full bg-transparent text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-zinc-600
             focus:outline-none ${className}
-          `} {...props} />
+          `}
+          {...props}
+        />
       </div>
     </div>;
 };

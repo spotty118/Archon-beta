@@ -653,7 +653,8 @@ async def generate_code_summaries_batch(
                 max_workers = int(credential_service._cache["CODE_SUMMARY_MAX_WORKERS"])
             else:
                 max_workers = int(os.getenv("CODE_SUMMARY_MAX_WORKERS", "3"))
-        except Exception:
+        except Exception as e:
+            search_logger.warning(f"Failed to get CODE_SUMMARY_MAX_WORKERS setting: {e}")
             max_workers = 3  # Default fallback
 
     search_logger.info(
@@ -790,14 +791,16 @@ async def add_code_examples_to_supabase(
                 try:
                     decrypted = credential_service._decrypt_value(encrypted_value)
                     use_contextual_embeddings = decrypted.lower() == "true"
-                except Exception:
+                except Exception as e:
+                    search_logger.warning(f"Failed to decrypt USE_CONTEXTUAL_EMBEDDINGS setting: {e}")
                     use_contextual_embeddings = False
             else:
                 use_contextual_embeddings = False
         else:
             use_contextual_embeddings = bool(use_contextual_embeddings)
-    except Exception:
+    except Exception as e:
         # Fallback to environment variable
+        search_logger.warning(f"Failed to get USE_CONTEXTUAL_EMBEDDINGS from credential service: {e}")
         use_contextual_embeddings = (
             os.getenv("USE_CONTEXTUAL_EMBEDDINGS", "false").lower() == "true"
         )

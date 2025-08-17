@@ -9,27 +9,121 @@ Handles:
 """
 
 import asyncio
+import os
 import time
 from collections import deque
 from datetime import datetime
-from typing import Any
+from enum import Enum
+from typing import Any, Optional
 
 import docker
 from docker.errors import APIError, NotFound
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, WebSocketException, Depends, status, Query
+from pydantic import BaseModel, Field, validator
 
 # Import unified logging
 from ..config.logfire_config import api_logger, mcp_logger, safe_set_attribute, safe_span
 from ..utils import get_supabase_client
+from ..services.http_client import MCPServiceClient
+from ..middleware.auth_middleware import require_authentication
+from ..config.security_config import get_current_user, TokenData, require_admin, verify_token
 
-router = APIRouter(prefix="/api/mcp", tags=["mcp"])
+
+router = APIRouter(prefix="/api/mcp", tags=["mcp"], dependencies=[Depends(require_authentication)])
+
+
+class TransportType(str, Enum):
+    """Allowed transport types for MCP server configuration.
+    
+    Security: Enum constraint prevents injection of invalid transport values
+    that could lead to configuration errors or unexpected behavior.
+    """
+    SSE = "sse"
+    STDIO = "stdio"
+    WEBSOCKET = "websocket"
 
 
 class ServerConfig(BaseModel):
-    transport: str = "sse"
-    host: str = "localhost"
-    port: int = 8051
+    """Enhanced MCP server configuration with comprehensive input validation.
+    
+    Security Features:
+    - Transport enum constraint prevents invalid values
+    - Host validation prevents SSRF and injection attacks
+    - Port range validation prevents system port conflicts
+    - Field constraints with length limits prevent DoS attacks
+    """
+    transport: TransportType = Field(
+        default=TransportType.SSE,
+        description="Transport protocol for MCP communication"
+    )
+    host: str = Field(
+        default="localhost",
+        min_length=1,
+        max_length=253,  # RFC 1035 hostname limit
+        pattern=r"^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$",
+        description="Hostname or IP address for MCP server"
+    )
+    port: int = Field(
+        default=8051,
+        ge=1024,  # Avoid system/privileged ports
+        le=65535,  # Valid port range
+        description="Port number for MCP server (1024-65535)"
+    )
+
+    @validator('host')
+    def validate_host(cls, v):
+        """Enhanced host validation with security checks.
+        
+        Security: Prevents SSRF attacks and validates hostname format.
+        Blocks localhost variations that could bypass security controls.
+        """
+        if not v or not v.strip():
+            raise ValueError("Host cannot be empty")
+        
+        v = v.strip().lower()
+        
+        # Block potentially dangerous hosts
+        dangerous_hosts = {
+            '0.0.0.0', '[::]', '::1', 'localhost', '127.0.0.1',
+            'metadata.google.internal', '169.254.169.254'  # Cloud metadata endpoints
+        }
+        
+        if v in dangerous_hosts and v != 'localhost':
+            raise ValueError(f"Host '{v}' is not allowed for security reasons")
+        
+        # Allow localhost specifically for local development
+        if v == 'localhost':
+            return v
+            
+        # Validate IP address format
+        import ipaddress
+        try:
+            ipaddress.ip_address(v)
+            return v
+        except ValueError:
+            pass
+        
+        # Additional hostname validation
+        if len(v) > 253:
+            raise ValueError("Hostname too long (max 253 characters)")
+        
+        # Validate hostname components
+        if v.startswith('.') or v.endswith('.'):
+            raise ValueError("Hostname cannot start or end with dot")
+        
+        return v
+
+    @validator('port')
+    def validate_port(cls, v):
+        """Enhanced port validation with security constraints.
+        
+        Security: Prevents binding to system ports and validates range.
+        """
+        if v < 1024:
+            raise ValueError("Port must be >= 1024 to avoid system ports")
+        if v > 65535:
+            raise ValueError("Port must be <= 65535")
+        return v
 
 
 class ServerResponse(BaseModel):
@@ -408,7 +502,9 @@ class MCPServerManager:
         for ws in self.log_websockets:
             try:
                 await ws.send_json(log_entry)
-            except Exception:
+            except Exception as e:
+                # Log WebSocket disconnection for debugging but continue gracefully
+                mcp_logger.debug(f"WebSocket disconnected during log broadcast: {str(e)}")
                 disconnected.append(ws)
 
         # Remove disconnected WebSockets
@@ -523,7 +619,7 @@ class MCPServerManager:
 mcp_manager = MCPServerManager()
 
 
-@router.post("/start", response_model=ServerResponse)
+@router.post("/start", response_model=ServerResponse, dependencies=[Depends(require_admin)])
 async def start_server():
     """Start the MCP server."""
     with safe_span("api_mcp_start") as span:
@@ -544,7 +640,7 @@ async def start_server():
             raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/stop", response_model=ServerResponse)
+@router.post("/stop", response_model=ServerResponse, dependencies=[Depends(require_admin)])
 async def stop_server():
     """Stop the MCP server."""
     with safe_span("api_mcp_stop") as span:
@@ -563,7 +659,7 @@ async def stop_server():
             raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/status")
+@router.get("/status", dependencies=[Depends(require_admin)])
 async def get_status():
     """Get MCP server status."""
     with safe_span("api_mcp_status") as span:
@@ -582,9 +678,20 @@ async def get_status():
             raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/logs")
-async def get_logs(limit: int = 100):
-    """Get MCP server logs."""
+@router.get("/logs", dependencies=[Depends(require_admin)])
+async def get_logs(
+    limit: int = Query(
+        default=100,
+        ge=1,
+        le=10000,  # Prevent DoS with excessive log requests
+        description="Maximum number of log entries to retrieve (1-10000)"
+    )
+):
+    """Get MCP server logs with validated limit parameter.
+    
+    Security: Query parameter validation prevents DoS attacks through
+    excessive log requests and ensures reasonable resource usage.
+    """
     with safe_span("api_mcp_logs") as span:
         safe_set_attribute(span, "endpoint", "/mcp/logs")
         safe_set_attribute(span, "method", "GET")
@@ -601,7 +708,7 @@ async def get_logs(limit: int = 100):
             raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/logs")
+@router.delete("/logs", dependencies=[Depends(require_admin)])
 async def clear_logs():
     """Clear MCP server logs."""
     with safe_span("api_mcp_clear_logs") as span:
@@ -620,7 +727,7 @@ async def clear_logs():
             raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/config")
+@router.get("/config", dependencies=[Depends(require_admin)])
 async def get_mcp_config():
     """Get MCP server configuration."""
     with safe_span("api_get_mcp_config") as span:
@@ -683,19 +790,23 @@ async def get_mcp_config():
             raise HTTPException(status_code=500, detail={"error": str(e)})
 
 
-@router.post("/config")
+@router.post("/config", dependencies=[Depends(require_admin)])
 async def save_configuration(config: ServerConfig):
-    """Save MCP server configuration."""
+    """Save MCP server configuration with enhanced validation.
+    
+    Security: Comprehensive input validation prevents configuration injection,
+    SSRF attacks, and invalid service configurations that could compromise security.
+    """
     with safe_span("api_save_mcp_config") as span:
         safe_set_attribute(span, "endpoint", "/api/mcp/config")
         safe_set_attribute(span, "method", "POST")
-        safe_set_attribute(span, "transport", config.transport)
+        safe_set_attribute(span, "transport", config.transport.value)
         safe_set_attribute(span, "host", config.host)
         safe_set_attribute(span, "port", config.port)
 
         try:
             api_logger.info(
-                f"Saving MCP server configuration | transport={config.transport} | host={config.host} | port={config.port}"
+                f"Saving MCP server configuration | transport={config.transport.value} | host={config.host} | port={config.port}"
             )
             supabase_client = get_supabase_client()
 
@@ -728,13 +839,52 @@ async def save_configuration(config: ServerConfig):
 
 @router.websocket("/logs/stream")
 async def websocket_log_stream(websocket: WebSocket):
-    """WebSocket endpoint for streaming MCP server logs."""
+    """WebSocket endpoint for streaming MCP server logs with enhanced authentication.
+    
+    Security: Enhanced token validation prevents authentication bypass,
+    rate limiting considerations, and secure error handling that doesn't leak information.
+    """
+    # Enhanced authentication with comprehensive validation
+    try:
+        token = websocket.query_params.get("token")
+        if not token:
+            raise WebSocketException(code=1008, reason="Authentication required")
+        
+        # Enhanced token format validation
+        if not isinstance(token, str) or len(token.strip()) == 0:
+            raise WebSocketException(code=1008, reason="Invalid token format")
+        
+        token = token.strip()
+        
+        # Basic token format validation (adjust pattern based on your token format)
+        if len(token) < 10 or len(token) > 2048:  # Reasonable token length bounds
+            raise WebSocketException(code=1008, reason="Invalid token length")
+        
+        # Verify token and get user
+        user = verify_token(token)
+        scopes = user.scopes or []
+        if "admin" not in scopes:
+            raise WebSocketException(code=1008, reason="Admin privileges required")
+            
+    except WebSocketException as we:
+        try:
+            await websocket.close(code=we.code)
+        except:
+            pass
+        return
+    except Exception:
+        # Generic error handling - don't leak specific error details
+        try:
+            await websocket.close(code=1008)
+        except:
+            pass
+        return
+
+    # Auth OK; register and stream
     await mcp_manager.add_websocket(websocket)
     try:
         while True:
-            # Keep connection alive
             await asyncio.sleep(1)
-            # Check if WebSocket is still connected
             await websocket.send_json({"type": "ping"})
     except WebSocketDisconnect:
         mcp_manager.remove_websocket(websocket)
@@ -746,7 +896,7 @@ async def websocket_log_stream(websocket: WebSocket):
             pass
 
 
-@router.get("/tools")
+@router.get("/tools", dependencies=[Depends(require_admin)])
 async def get_mcp_tools():
     """Get available MCP tools by querying the running MCP server's registered tools."""
     with safe_span("api_get_mcp_tools") as span:
@@ -771,47 +921,34 @@ async def get_mcp_tools():
                     "message": "MCP server is not running. Start the server to see available tools.",
                 }
 
-            # SIMPLE DEBUG: Just check if we can see any tools at all
-            try:
-                # Try to inspect the process to see what tools exist
-                api_logger.info("Debugging: Attempting to check MCP server tools")
+            # Build MCP base URL from environment
+            mcp_port = int(os.getenv("ARCHON_MCP_PORT", "8051"))
+            base_url = os.getenv("ARCHON_MCP_BASE_URL", f"http://localhost:{mcp_port}")
 
-                # For now, just return the known modules info since server is registering them
-                # This will at least show the UI that tools exist while we debug the real issue
-                if is_running:
-                    return {
-                        "tools": [
-                            {
-                                "name": "debug_placeholder",
-                                "description": "MCP server is running and modules are registered, but tool introspection is not working yet",
-                                "module": "debug",
-                                "parameters": [],
-                            }
-                        ],
-                        "count": 1,
-                        "server_running": True,
-                        "source": "debug_placeholder",
-                        "message": "MCP server is running with 3 modules registered. Tool introspection needs to be fixed.",
-                    }
-                else:
-                    return {
-                        "tools": [],
-                        "count": 0,
-                        "server_running": False,
-                        "source": "server_not_running",
-                        "message": "MCP server is not running. Start the server to see available tools.",
-                    }
+            # Query MCP for tools
+            client = MCPServiceClient(mcp_base_url=base_url)
+            tools_payload = await client.list_tools()
 
-            except Exception as e:
-                api_logger.error("Failed to debug MCP server tools", error=str(e))
+            # Normalize response
+            if isinstance(tools_payload, dict) and "tools" in tools_payload:
+                tools = tools_payload.get("tools", [])
+            elif isinstance(tools_payload, list):
+                tools = tools_payload
+            else:
+                # Unknown format; wrap as-is
+                tools = []
+                api_logger.warning("Unexpected tools payload format from MCP service")
+                safe_set_attribute(span, "unexpected_payload", True)
 
-                return {
-                    "tools": [],
-                    "count": 0,
-                    "server_running": is_running,
-                    "source": "debug_error",
-                    "message": f"Debug failed: {str(e)}",
-                }
+            response = {
+                "tools": tools,
+                "count": len(tools),
+                "server_running": True,
+                "source": "mcp_http_client",
+                "base_url": base_url,
+            }
+            safe_set_attribute(span, "tool_count", len(tools))
+            return response
 
         except Exception as e:
             api_logger.error("Failed to get MCP tools", error=str(e))
@@ -821,7 +958,7 @@ async def get_mcp_tools():
             return {
                 "tools": [],
                 "count": 0,
-                "server_running": False,
+                "server_running": True,
                 "source": "general_error",
                 "message": f"Error retrieving MCP tools: {str(e)}",
             }

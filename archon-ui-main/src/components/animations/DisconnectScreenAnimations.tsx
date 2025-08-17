@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { useSettings } from '../../contexts/SettingsContext';
 
 /**
  * Disconnect Screen
@@ -6,8 +7,10 @@ import React, { useEffect, useRef } from 'react';
  */
 export const DisconnectScreen: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { enableHighFidelityAnimations } = useSettings();
 
   useEffect(() => {
+    if (!enableHighFidelityAnimations) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -96,11 +99,15 @@ export const DisconnectScreen: React.FC = () => {
     return () => {
       window.removeEventListener('resize', handleResize);
     };
-  }, []);
+  }, [enableHighFidelityAnimations]);
 
   return (
     <div className="relative w-full h-full bg-black overflow-hidden">
-      <canvas ref={canvasRef} className="absolute inset-0" />
+      {enableHighFidelityAnimations ? (
+        <canvas ref={canvasRef} className="absolute inset-0" />
+      ) : (
+        <div className="absolute inset-0 bg-gradient-to-br from-gray-900 to-black" />
+      )}
       
       {/* Glass medallion with frosted effect - made bigger */}
       <div className="absolute inset-0 flex items-center justify-center">

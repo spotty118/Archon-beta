@@ -150,7 +150,8 @@ async def add_documents_to_supabase(
                         "CONTEXTUAL_EMBEDDINGS_MAX_WORKERS", "4", decrypt=True
                     )
                     max_workers = int(max_workers)
-                except Exception:
+                except Exception as e:
+                    search_logger.warning(f"Failed to get CONTEXTUAL_EMBEDDINGS_MAX_WORKERS setting: {e}")
                     max_workers = 4
             else:
                 max_workers = 1
@@ -186,7 +187,8 @@ async def add_documents_to_supabase(
                     contextual_batch_size = int(
                         rag_settings.get("CONTEXTUAL_EMBEDDING_BATCH_SIZE", "50")
                     )
-                except Exception:
+                except Exception as e:
+                    search_logger.warning(f"Failed to get CONTEXTUAL_EMBEDDING_BATCH_SIZE setting: {e}")
                     contextual_batch_size = 50
 
                 try:

@@ -8,6 +8,43 @@ import { DisconnectScreenOverlay } from './components/DisconnectScreenOverlay';
 import { ErrorBoundaryWithBugReport } from './components/bug-report/ErrorBoundaryWithBugReport';
 import { serverHealthService } from './services/serverHealthService';
 
+// Runtime console policy to control verbosity via Vite env
+// Usage:
+// - VITE_LOG_LEVEL: "silent" | "error" | "warn" | "info" | "debug" (default: "debug" in dev, "warn" in prod)
+// - VITE_ENABLE_VERBOSE_LOGS: "true" to bypass filtering (useful for debugging sessions)
+// Force log any message by prefixing first arg with "[FORCE]"
+type ConsoleMethod = 'error' | 'warn' | 'info' | 'log' | 'debug';
+const ARCHON_LOG_LEVEL =
+  (import.meta.env.VITE_LOG_LEVEL ?? (import.meta.env.MODE === 'production' ? 'warn' : 'debug')).toLowerCase();
+const ARCHON_VERBOSE_LOGS = import.meta.env.VITE_ENABLE_VERBOSE_LOGS === 'true';
+
+(function installConsolePolicy() {
+  if (ARCHON_VERBOSE_LOGS) return;
+
+  const levelOrder: Record<string, number> = { silent: 0, error: 1, warn: 2, info: 3, log: 3, debug: 4 };
+  const current = levelOrder[ARCHON_LOG_LEVEL] ?? 2; // default to 'warn'
+
+  const patch = (method: ConsoleMethod, minLevel: number) => {
+    const original = (console as any)[method].bind(console);
+    (console as any)[method] = (...args: any[]) => {
+      if (typeof args[0] === 'string' && args[0].startsWith('[FORCE]')) {
+        return original(...args);
+      }
+      if (current >= minLevel) {
+        return original(...args);
+      }
+      // suppressed
+    };
+  };
+
+  // error:1, warn:2, info/log:3, debug:4
+  patch('error', 1);
+  patch('warn', 2);
+  patch('info', 3);
+  patch('log', 3);
+  patch('debug', 4);
+})();
+
 // Beta Enhancement: Lazy load main route components for improved initial bundle size
 // This reduces the initial bundle from ~800KB to <500KB target
 const KnowledgeBasePage = lazy(() => import('./pages/KnowledgeBasePage').then(module => ({ default: module.KnowledgeBasePage })));

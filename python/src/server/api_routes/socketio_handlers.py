@@ -10,6 +10,7 @@ import asyncio
 import time
 
 from ..config.logfire_config import get_logger
+from ..config.security_config import verify_token, TokenData
 from ..services.background_task_manager import get_task_manager
 from ..services.projects.project_service import ProjectService
 from ..services.projects.source_linking_service import SourceLinkingService
@@ -24,6 +25,7 @@ logger.info(f"🔗 [SOCKETIO] Socket.IO instance ID: {id(sio)}")
 # Rate limiting for Socket.IO broadcasts
 _last_broadcast_times: dict[str, float] = {}
 _min_broadcast_interval = 0.1  # Minimum 100ms between broadcasts per room
+_socketio_auth_users: dict[str, TokenData] = {}  # sid -> TokenData
 
 
 # Broadcast helper functions
@@ -219,6 +221,25 @@ async def error_crawl_progress(progress_id: str, error_msg: str):
 @sio.event
 async def connect(sid, environ):
     """Handle client connection."""
+    # Enforce JWT token via query string (?token=...)
+    try:
+        import urllib.parse
+        query_params = environ.get("QUERY_STRING", "") or ""
+        params = urllib.parse.parse_qs(query_params)
+        token = params.get("token", [None])[0]
+        if not token:
+            logger.warning(f"🔒 [SOCKETIO] Rejecting connection {sid}: missing token")
+            return False  # Reject connection
+        try:
+            user = verify_token(token)
+            _socketio_auth_users[sid] = user
+            logger.info(f"🔓 [SOCKETIO] Authenticated sid {sid} as sub={user.sub} scopes={user.scopes}")
+        except Exception as e:
+            logger.warning(f"🔒 [SOCKETIO] Rejecting connection {sid}: invalid token ({e})")
+            return False
+    except Exception as e:
+        logger.warning(f"🔒 [SOCKETIO] Rejecting connection {sid}: error parsing token ({e})")
+        return False
     client_address = environ.get("REMOTE_ADDR", "unknown")
     query_params = environ.get("QUERY_STRING", "")
     headers = {k: v for k, v in environ.items() if k.startswith("HTTP_")}
@@ -250,8 +271,8 @@ async def connect(sid, environ):
                 for room_sids in namespace_rooms.values():
                     all_sids.update(room_sids)
             logger.debug(f"Total connected clients: {len(all_sids)}")
-    except:
-        pass
+    except (AttributeError, KeyError, TypeError) as e:
+        logger.debug(f"Could not get total connected clients count: {str(e)}")
 
 
 @sio.event
@@ -261,11 +282,19 @@ async def disconnect(sid):
     rooms = sio.rooms(sid) if hasattr(sio, "rooms") else []
     logger.info(f"🔌 [SOCKETIO] Client disconnected: {sid}, was in rooms: {rooms}")
     logger.info(f"Client disconnected: {sid}, was in rooms: {rooms}")
+    # Cleanup auth mapping
+    try:
+        _socketio_auth_users.pop(sid, None)
+    except KeyError as e:
+        logger.debug(f"Auth mapping cleanup failed for sid {sid}: {str(e)}")
 
 
 @sio.event
 async def join_project(sid, data):
     """Join a project room to receive task updates."""
+    if sid not in _socketio_auth_users:
+        await sio.emit("error", {"message": "authentication required"}, to=sid)
+        return
     project_id = data.get("project_id")
     if not project_id:
         await sio.emit("error", {"message": "project_id required"}, to=sid)
@@ -292,6 +321,9 @@ async def leave_project(sid, data):
 @sio.event
 async def subscribe_projects(sid, data=None):
     """Subscribe to project list updates."""
+    if sid not in _socketio_auth_users:
+        await sio.emit("error", {"message": "authentication required"}, to=sid)
+        return
     await sio.enter_room(sid, "project_list")
     logger.info(f"📥 [SOCKETIO] Client {sid} joined project_list room")
     logger.info(f"Client {sid} subscribed to project list")
@@ -328,6 +360,9 @@ async def unsubscribe_projects(sid, data=None):
 @sio.event
 async def subscribe_progress(sid, data):
     """Subscribe to project creation progress."""
+    if sid not in _socketio_auth_users:
+        await sio.emit("error", {"message": "authentication required"}, to=sid)
+        return
     logger.info(f"🔔 [SOCKETIO] Received subscribe_progress from {sid} with data: {data}")
     progress_id = data.get("progress_id")
     if not progress_id:
@@ -378,6 +413,9 @@ async def unsubscribe_progress(sid, data):
 @sio.event
 async def crawl_subscribe(sid, data=None):
     """Subscribe to crawl progress updates."""
+    if sid not in _socketio_auth_users:
+        await sio.emit("error", {"message": "authentication required"}, to=sid)
+        return
     logger.info(f"📥 [SOCKETIO] Received crawl_subscribe from {sid} with data: {data}")
     logger.debug(f"crawl_subscribe event - sid: {sid}, data: {data}")
     progress_id = data.get("progress_id") if data else None
@@ -645,6 +683,9 @@ document_locks: dict[str, dict[str, Any]] = {}
 @sio.event
 async def join_document_room(sid, data):
     """Join a document room for real-time collaboration."""
+    if sid not in _socketio_auth_users:
+        await sio.emit("error", {"message": "authentication required"}, to=sid)
+        return
     project_id = data.get("project_id")
     document_id = data.get("document_id")
 
@@ -684,6 +725,9 @@ async def leave_document_room(sid, data):
 @sio.event
 async def request_document_states(sid, data):
     """Request all document states for a project."""
+    if sid not in _socketio_auth_users:
+        await sio.emit("error", {"message": "authentication required"}, to=sid)
+        return
     project_id = data.get("project_id")
     if not project_id:
         await sio.emit("error", {"message": "project_id required"}, to=sid)
@@ -701,6 +745,9 @@ async def request_document_states(sid, data):
 @sio.event
 async def document_change(sid, data):
     """Handle single document change."""
+    if sid not in _socketio_auth_users:
+        await sio.emit("error", {"message": "authentication required"}, to=sid)
+        return
     try:
         change_data = data.get("change")
         if not change_data:
@@ -718,6 +765,9 @@ async def document_change(sid, data):
 @sio.event
 async def document_batch_update(sid, data):
     """Handle batched document changes."""
+    if sid not in _socketio_auth_users:
+        await sio.emit("error", {"message": "authentication required"}, to=sid)
+        return
     try:
         project_id = data.get("project_id")
         document_id = data.get("document_id")
@@ -875,6 +925,9 @@ async def process_document_change(
 @sio.event
 async def lock_document(sid, data):
     """Lock a document for exclusive editing."""
+    if sid not in _socketio_auth_users:
+        await sio.emit("error", {"message": "authentication required"}, to=sid)
+        return
     document_id = data.get("document_id")
     user_id = data.get("user_id")
     lock_duration = data.get("duration", 300000)  # 5 minutes default
@@ -934,6 +987,9 @@ async def lock_document(sid, data):
 @sio.event
 async def unlock_document(sid, data):
     """Unlock a document."""
+    if sid not in _socketio_auth_users:
+        await sio.emit("error", {"message": "authentication required"}, to=sid)
+        return
     document_id = data.get("document_id")
     user_id = data.get("user_id")
 
@@ -988,6 +1044,9 @@ async def unlock_document(sid, data):
 @sio.event
 async def delete_document(sid, data):
     """Delete a document with synchronization."""
+    if sid not in _socketio_auth_users:
+        await sio.emit("error", {"message": "authentication required"}, to=sid)
+        return
     document_id = data.get("document_id")
     project_id = data.get("project_id")
     user_id = data.get("user_id")

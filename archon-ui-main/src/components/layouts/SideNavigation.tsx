@@ -86,6 +86,8 @@ export const SideNavigation: React.FC<SideNavigationProps> = ({
           className={logoClassName}
           onMouseEnter={() => setActiveTooltip('logo')} 
           onMouseLeave={() => setActiveTooltip(null)}
+          onFocus={() => setActiveTooltip('logo')}
+          onBlur={() => setActiveTooltip(null)}
         >
           <img src={logoSrc} alt={logoAlt} className={`w-8 h-8 transition-all duration-300 ${isProjectsActive ? 'filter drop-shadow-[0_0_8px_rgba(59,130,246,0.7)]' : ''}`} />
           {/* Active state decorations */}
@@ -100,6 +102,8 @@ export const SideNavigation: React.FC<SideNavigationProps> = ({
           className={logoClassName}
           onMouseEnter={() => setActiveTooltip('logo')} 
           onMouseLeave={() => setActiveTooltip(null)}
+          onFocus={() => setActiveTooltip('logo')}
+          onBlur={() => setActiveTooltip(null)}
         >
           <img src={logoSrc} alt={logoAlt} className="w-8 h-8 transition-all duration-300" />
           <NavTooltip show={activeTooltip === 'logo'} label="Projects Disabled" />
@@ -113,7 +117,7 @@ export const SideNavigation: React.FC<SideNavigationProps> = ({
                 relative p-3 rounded-lg flex items-center justify-center
                 transition-all duration-300
                 ${isActive ? 'bg-gradient-to-b from-white/20 to-white/5 dark:from-white/10 dark:to-black/20 text-blue-600 dark:text-blue-400 shadow-[0_5px_15px_-5px_rgba(59,130,246,0.3)] dark:shadow-[0_5px_15px_-5px_rgba(59,130,246,0.5)]' : 'text-gray-500 dark:text-zinc-500 hover:text-blue-600 dark:hover:text-blue-400'}
-              `} onMouseEnter={() => setActiveTooltip(item.path)} onMouseLeave={() => setActiveTooltip(null)} aria-label={item.label}>
+              `} onMouseEnter={() => setActiveTooltip(item.path)} onMouseLeave={() => setActiveTooltip(null)} onFocus={() => setActiveTooltip(item.path)} onBlur={() => setActiveTooltip(null)} aria-label={item.label}>
               {/* Active state decorations - Modified to place neon line below button with adjusted width */}
               {isActive && <>
                   <span className="absolute inset-0 rounded-lg border border-blue-300 dark:border-blue-500/30"></span>

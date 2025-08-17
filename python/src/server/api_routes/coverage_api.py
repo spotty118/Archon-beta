@@ -1,14 +1,22 @@
 """Coverage report API endpoints for serving test coverage data."""
 
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional, Dict
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
-router = APIRouter(prefix="/api/coverage", tags=["coverage"])
+from ..middleware.auth_middleware import require_authentication
+
+# Set up logging for coverage API
+logger = logging.getLogger(__name__)
+
+# Protect coverage endpoints behind authentication
+router = APIRouter(prefix="/api/coverage", tags=["coverage"], dependencies=[Depends(require_authentication)])
 
 
 @router.get("/debug/paths")
@@ -43,6 +51,25 @@ else:
     VITEST_COVERAGE_PATH = UI_BASE_PATH / "public" / "test-results" / "coverage"
 
 
+def _resolve_under_base(base: Path, relative_path: str) -> Path:
+    """
+    Safely resolve a relative path under a given base directory.
+    Raises HTTPException if the resolved path escapes the base.
+    """
+    try:
+        resolved = (base / relative_path).resolve()
+        base_resolved = base.resolve()
+        # Ensure the resolved path is within the base
+        if not str(resolved).startswith(str(base_resolved)):
+            raise HTTPException(status_code=400, detail="Invalid path")
+        return resolved
+    except HTTPException:
+        raise
+    except (OSError, ValueError) as e:
+        logger.warning(f"Path resolution failed for {relative_path}: {str(e)}")
+        raise HTTPException(status_code=400, detail="Invalid path")
+
+
 @router.get("/pytest/json")
 async def get_pytest_coverage_json() -> dict[str, Any]:
     """Get pytest coverage data as JSON"""
@@ -57,8 +84,9 @@ async def get_pytest_coverage_json() -> dict[str, Any]:
 @router.get("/pytest/html/{path:path}")
 async def get_pytest_coverage_html(path: str) -> FileResponse:
     """Serve pytest HTML coverage report files"""
-    file_path = PYTEST_COVERAGE_PATH / "htmlcov" / path
-    if not file_path.exists():
+    base = PYTEST_COVERAGE_PATH / "htmlcov"
+    file_path = _resolve_under_base(base, path)
+    if not file_path.exists() or not file_path.is_file():
         raise HTTPException(status_code=404, detail="File not found")
 
     # Determine content type based on file extension
@@ -98,8 +126,9 @@ async def get_vitest_coverage_summary() -> dict[str, Any]:
 @router.get("/vitest/html/{path:path}")
 async def get_vitest_coverage_html(path: str) -> FileResponse:
     """Serve vitest HTML coverage report files"""
-    file_path = VITEST_COVERAGE_PATH / path
-    if not file_path.exists():
+    base = VITEST_COVERAGE_PATH
+    file_path = _resolve_under_base(base, path)
+    if not file_path.exists() or not file_path.is_file():
         raise HTTPException(status_code=404, detail="File not found")
 
     # Determine content type based on file extension
@@ -114,7 +143,28 @@ async def get_vitest_coverage_html(path: str) -> FileResponse:
     return FileResponse(file_path, media_type=content_type)
 
 
-@router.get("/combined-summary")
+class CoverageMetric(BaseModel):
+    pct: Optional[float] = None
+    total: Optional[int] = None
+    covered: Optional[int] = None
+    skipped: Optional[int] = None
+
+
+class CombinedTotals(BaseModel):
+    lines: CoverageMetric = CoverageMetric()
+    statements: CoverageMetric = CoverageMetric()
+    functions: CoverageMetric = CoverageMetric()
+    branches: CoverageMetric = CoverageMetric()
+
+
+class CombinedCoverageResponse(BaseModel):
+    backend: Optional[Dict[str, Any]] = None
+    frontend: Optional[Dict[str, Any]] = None
+    timestamp: str
+    total: CombinedTotals
+
+
+@router.get("/combined-summary", response_model=CombinedCoverageResponse)
 async def get_combined_coverage_summary() -> dict[str, Any]:
     """Get combined coverage summary from all test suites"""
     combined_summary = {
@@ -139,8 +189,9 @@ async def get_combined_coverage_summary() -> dict[str, Any]:
                 "files": len(pytest_cov.get("files", {})),
             }
             pytest_available = True
-    except Exception:
-        # If pytest coverage doesn't exist, that's fine
+    except (FileNotFoundError, json.JSONDecodeError, PermissionError) as e:
+        # If pytest coverage doesn't exist or can't be read, that's fine
+        logger.warning(f"Pytest coverage data unavailable: {str(e)}")
         combined_summary["backend"] = {
             "summary": {},
             "files": 0,
@@ -153,7 +204,8 @@ async def get_combined_coverage_summary() -> dict[str, Any]:
         vitest_cov = await get_vitest_coverage_summary()
         combined_summary["frontend"] = vitest_cov
         vitest_available = True
-    except Exception:
+    except (FileNotFoundError, json.JSONDecodeError, PermissionError) as e:
+        logger.warning(f"Vitest coverage data unavailable: {str(e)}")
         combined_summary["frontend"] = {"total": {}, "message": "No vitest coverage data available"}
 
     # Calculate combined totals if any coverage is available

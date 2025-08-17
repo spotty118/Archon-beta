@@ -193,11 +193,16 @@ class VersioningService:
                 .eq("id", project_id)
                 .execute()
             )
+            backup_created = False
+            restore_record_created = False
+            rolled_back = False
+            messages: list[str] = []
+
             if current_project.data:
                 current_content = current_project.data[0].get(field_name, {})
 
                 # Create backup version before restore
-                backup_result = self.create_version(
+                backup_ok, backup_info = self.create_version(
                     project_id=project_id,
                     field_name=field_name,
                     content=current_content,
@@ -205,12 +210,13 @@ class VersioningService:
                     change_type="backup",
                     created_by=restored_by,
                 )
-
-                if not backup_result[0]:
-                    logger.warning(f"Failed to create backup version: {backup_result[1]}")
+                backup_created = bool(backup_ok)
+                if not backup_ok:
+                    logger.warning(f"Failed to create backup version: {backup_info}")
+                    messages.append("Backup version creation failed")
 
             # Restore the content to project
-            update_data = {field_name: content_to_restore, "updated_at": datetime.now().isoformat()}
+            update_data = {field_name: content_to_restore, "updated_at": datetime.now().isoformat()};
 
             restore_result = (
                 self.supabase_client.table("archon_projects")
@@ -220,25 +226,61 @@ class VersioningService:
             )
 
             if restore_result.data:
-                # Create restore version record
-                restore_version_result = self.create_version(
-                    project_id=project_id,
-                    field_name=field_name,
-                    content=content_to_restore,
-                    change_summary=f"Restored to version {version_number}",
-                    change_type="restore",
-                    created_by=restored_by,
-                )
+                # Create restore version record (non-fatal if it fails)
+                try:
+                    restore_ok, restore_info = self.create_version(
+                        project_id=project_id,
+                        field_name=field_name,
+                        content=content_to_restore,
+                        change_summary=f"Restored to version {version_number}",
+                        change_type="restore",
+                        created_by=restored_by,
+                    )
+                    restore_record_created = bool(restore_ok)
+                    if not restore_ok:
+                        logger.warning(f"Failed to create restore record: {restore_info}")
+                        messages.append("Restore record creation failed")
+                except Exception as e:
+                    logger.warning(f"Exception creating restore record: {e}")
+                    messages.append(f"Restore record exception: {str(e)}")
 
                 return True, {
                     "project_id": project_id,
                     "field_name": field_name,
                     "restored_version": version_number,
                     "restored_by": restored_by,
+                    "backup_created": backup_created,
+                    "restore_record_created": restore_record_created,
+                    "rolled_back": rolled_back,
+                    "messages": messages,
                 }
             else:
-                return False, {"error": "Failed to restore version"}
+                return False, {
+                    "error": "Failed to restore version",
+                    "backup_created": backup_created,
+                    "restore_record_created": restore_record_created,
+                    "rolled_back": rolled_back,
+                    "messages": messages,
+                }
 
         except Exception as e:
             logger.error(f"Error restoring version: {e}")
-            return False, {"error": f"Error restoring version: {str(e)}"}
+            # Best-effort rollback attempt if we have current_content in scope
+            try:
+                if 'current_content' in locals():
+                    update_data = {field_name: current_content, "updated_at": datetime.now().isoformat()}
+                    rb = (
+                        self.supabase_client.table("archon_projects")
+                        .update(update_data)
+                        .eq("id", project_id)
+                        .execute()
+                    )
+                    if rb.data:
+                        rolled_back = True
+                        logger.warning("Rolled back to previous content after restore failure")
+            except Exception as rb_e:
+                logger.error(f"Rollback attempt failed: {rb_e}")
+            return False, {
+                "error": f"Error restoring version: {str(e)}",
+                "rolled_back": rolled_back
+            }

@@ -238,6 +238,20 @@ RAG query interface:
 --error: Red indicators
 ```
 
+## 🔧 Frontend Logging Controls (Vite)
+
+The UI console output can be controlled at runtime using environment variables:
+
+- VITE_LOG_LEVEL: one of silent | error | warn | info | debug
+  - Defaults to "debug" in development and "warn" in production
+  - Controls which console methods are allowed:
+    - error (1), warn (2), info/log (3), debug (4)
+- VITE_ENABLE_VERBOSE_LOGS: when "true", bypasses filtering and allows all console output (useful for debugging sessions)
+
+Notes:
+- Any log you must always output can be prefixed with "[FORCE]" in the first argument to bypass filtering (e.g., console.log("[FORCE] important", data)).
+- This policy is applied at app startup, so changes to envs take effect on reload.
+
 ## 🚀 Development
 
 ### Setup
@@ -258,6 +272,8 @@ npm test
 ### Environment Variables
 ```env
 VITE_API_URL=http://localhost:8080
+VITE_LOG_LEVEL=warn            # silent | error | warn | info | debug
+VITE_ENABLE_VERBOSE_LOGS=false # set to 'true' to bypass filtering
 ```
 
 ### Hot Module Replacement

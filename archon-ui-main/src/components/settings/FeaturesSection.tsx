@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Moon, Sun, FileText, Layout, Bot, Settings, Palette, Flame, Monitor } from 'lucide-react';
+import { Moon, Sun, FileText, Layout, Bot, Settings, Palette, Flame, Monitor, Sparkles, Zap, Timer } from 'lucide-react';
 import { Toggle } from '../ui/Toggle';
 import { Card } from '../ui/Card';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useSettings } from '../../contexts/SettingsContext';
 import { credentialsService } from '../../services/credentialsService';
 import { useToast } from '../../contexts/ToastContext';
 import { serverHealthService } from '../../services/serverHealthService';
@@ -13,6 +14,14 @@ export const FeaturesSection = () => {
     theme,
     setTheme
   } = useTheme();
+  const {
+    enableHighFidelityAnimations,
+    setEnableHighFidelityAnimations,
+    enableHighFrequencyPolling,
+    setEnableHighFrequencyPolling,
+    pollingInterval,
+    setPollingInterval
+  } = useSettings();
   const { showToast } = useToast();
   const isDarkMode = theme === 'dark';
   const [projectsEnabled, setProjectsEnabled] = useState(true);
@@ -183,7 +192,7 @@ export const FeaturesSection = () => {
       await serverHealthService.updateSettings({ enabled: checked });
 
       showToast(
-        checked ? 'Disconnect Screen Enabled' : 'Disconnect Screen Disabled', 
+        checked ? 'Disconnect Screen Enabled' : 'Disconnect Screen Disabled',
         checked ? 'success' : 'warning'
       );
     } catch (error) {
@@ -193,6 +202,30 @@ export const FeaturesSection = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleAnimationsToggle = (checked: boolean) => {
+    setEnableHighFidelityAnimations(checked);
+    showToast(
+      checked ? 'High-Fidelity Animations Enabled' : 'High-Fidelity Animations Disabled',
+      checked ? 'success' : 'warning'
+    );
+  };
+
+  const handleHighFrequencyPollingToggle = (checked: boolean) => {
+    setEnableHighFrequencyPolling(checked);
+    showToast(
+      checked ? 'High-Frequency Polling Enabled' : 'High-Frequency Polling Disabled',
+      checked ? 'success' : 'warning'
+    );
+  };
+
+  const handlePollingIntervalChange = (interval: number) => {
+    setPollingInterval(interval);
+    showToast(
+      `Polling interval updated to ${interval / 1000}s`,
+      'success'
+    );
   };
 
   return (
@@ -229,12 +262,32 @@ export const FeaturesSection = () => {
               )}
             </div>
             <div className="flex-shrink-0">
-              <Toggle 
-                checked={projectsEnabled} 
-                onCheckedChange={handleProjectsToggle} 
-                accentColor="blue" 
+              <Toggle
+                checked={projectsEnabled}
+                onCheckedChange={handleProjectsToggle}
+                accentColor="blue"
                 icon={<FileText className="w-5 h-5" />}
                 disabled={loading || !projectsSchemaValid}
+              />
+            </div>
+          </div>
+
+          {/* High-Fidelity Animations Toggle */}
+          <div className="flex items-center gap-4 p-4 rounded-xl bg-gradient-to-br from-cyan-500/10 to-cyan-600/5 backdrop-blur-sm border border-cyan-500/20 shadow-lg">
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-gray-800 dark:text-white">
+                High-Fidelity Animations
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Enable advanced visual effects and animations
+              </p>
+            </div>
+            <div className="flex-shrink-0">
+              <Toggle
+                checked={enableHighFidelityAnimations}
+                onCheckedChange={handleAnimationsToggle}
+                accentColor="cyan"
+                icon={<Sparkles className="w-5 h-5" />}
               />
             </div>
           </div>
@@ -294,6 +347,26 @@ export const FeaturesSection = () => {
             </div>
           </div>
 
+          {/* High-Frequency Polling Toggle */}
+          <div className="flex items-center gap-4 p-4 rounded-xl bg-gradient-to-br from-yellow-500/10 to-yellow-600/5 backdrop-blur-sm border border-yellow-500/20 shadow-lg">
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-gray-800 dark:text-white">
+                High-Frequency Polling
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Enable frequent status updates (may impact performance)
+              </p>
+            </div>
+            <div className="flex-shrink-0">
+              <Toggle
+                checked={enableHighFrequencyPolling}
+                onCheckedChange={handleHighFrequencyPollingToggle}
+                accentColor="yellow"
+                icon={<Zap className="w-5 h-5" />}
+              />
+            </div>
+          </div>
+
           {/* Disconnect Screen Toggle */}
           <div className="flex items-center gap-4 p-4 rounded-xl bg-gradient-to-br from-green-500/10 to-green-600/5 backdrop-blur-sm border border-green-500/20 shadow-lg">
             <div className="flex-1 min-w-0">
@@ -305,16 +378,57 @@ export const FeaturesSection = () => {
               </p>
             </div>
             <div className="flex-shrink-0">
-              <Toggle 
-                checked={disconnectScreenEnabled} 
-                onCheckedChange={handleDisconnectScreenToggle} 
-                accentColor="green" 
+              <Toggle
+                checked={disconnectScreenEnabled}
+                onCheckedChange={handleDisconnectScreenToggle}
+                accentColor="green"
                 icon={<Monitor className="w-5 h-5" />}
                 disabled={loading}
               />
             </div>
           </div>
         </div>
+
+        {/* Advanced Polling Settings */}
+        {enableHighFrequencyPolling && (
+          <div className="mt-6">
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
+              <Timer className="w-5 h-5 text-blue-500" />
+              Polling Configuration
+            </h3>
+            <div className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 backdrop-blur-sm border border-blue-500/20 shadow-lg rounded-xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <p className="font-medium text-gray-800 dark:text-white">
+                    Polling Interval
+                  </p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    How often to check for updates (5s - 300s)
+                  </p>
+                </div>
+                <div className="text-sm font-mono text-blue-600 dark:text-blue-400">
+                  {(pollingInterval / 1000).toFixed(0)}s
+                </div>
+              </div>
+              <input
+                type="range"
+                min="5000"
+                max="300000"
+                step="5000"
+                value={pollingInterval}
+                onChange={(e) => handlePollingIntervalChange(parseInt(e.target.value))}
+                className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
+              />
+              <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
+                <span>5s</span>
+                <span>Fast</span>
+                <span>Balanced</span>
+                <span>Conservative</span>
+                <span>300s</span>
+              </div>
+            </div>
+          </div>
+        )}
     </>
   );
 };

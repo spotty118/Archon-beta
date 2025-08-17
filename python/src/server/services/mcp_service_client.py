@@ -213,18 +213,80 @@ class MCPServiceClient:
         self, texts: list[str], model: str = "text-embedding-3-small"
     ) -> dict[str, Any]:
         """
-        Generate embeddings - this should be handled by Server's service layer.
-        MCP tools shouldn't need to directly generate embeddings.
-
+        Generate embeddings by calling the API service's embeddings endpoint.
+        
         Args:
             texts: List of texts to embed
-            model: Embedding model to use
+            model: Embedding model to use (default: text-embedding-3-small)
 
         Returns:
-            Embeddings response
+            Embeddings response with vectors and metadata
         """
-        mcp_logger.warning("Direct embedding generation not needed for MCP tools")
-        raise NotImplementedError("Embeddings should be handled by Server's service layer")
+        endpoint = urljoin(self.api_url, "/api/embeddings/generate")
+        request_data = {
+            "texts": texts,
+            "model": model
+        }
+
+        mcp_logger.info(f"Calling API service to generate embeddings for {len(texts)} texts")
+
+        try:
+            # Use connection pooling HTTP client with fallback to httpx
+            result = await self.http_client.post(
+                endpoint,
+                json_data=request_data,
+                headers=self._get_headers(),
+                timeout=60.0  # 1 minute for embedding generation
+            )
+            
+            if result is not None:
+                # Transform API response to MCP expected format
+                return {
+                    "success": result.get("success", True),
+                    "embeddings": result.get("embeddings", []),
+                    "model": result.get("model", model),
+                    "usage": result.get("usage", {}),
+                    "error": None,
+                }
+            else:
+                # Fallback to httpx if connection pooling failed
+                mcp_logger.warning("Connection pooling unavailable for embeddings, falling back to httpx")
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    response = await client.post(
+                        endpoint, json=request_data, headers=self._get_headers()
+                    )
+                    response.raise_for_status()
+                    fallback_result = response.json()
+
+                    return {
+                        "success": fallback_result.get("success", True),
+                        "embeddings": fallback_result.get("embeddings", []),
+                        "model": fallback_result.get("model", model),
+                        "usage": fallback_result.get("usage", {}),
+                        "error": None,
+                    }
+
+        except httpx.TimeoutException:
+            mcp_logger.error(f"Timeout generating embeddings for {len(texts)} texts")
+            return {
+                "success": False,
+                "embeddings": [],
+                "error": {"code": "TIMEOUT", "message": "Embedding generation timed out"},
+            }
+        except httpx.HTTPStatusError as e:
+            mcp_logger.error(f"HTTP error generating embeddings: {e.response.status_code}")
+            return {
+                "success": False,
+                "embeddings": [],
+                "error": {"code": "HTTP_ERROR", "message": str(e)}
+            }
+        except Exception as e:
+            mcp_logger.error(f"Error generating embeddings: {str(e)}")
+            return {
+                "success": False,
+                "embeddings": [],
+                "error": {"code": "EMBEDDING_FAILED", "message": str(e)}
+            }
 
     # Removed analyze_document - document analysis should be handled by Agents via MCP tools
 
