@@ -957,8 +957,8 @@ async def list_project_documents(project_id: str = Path(..., pattern=r"^[0-9a-fA
 
 @router.post("/projects/{project_id}/docs")
 async def create_project_document(
-    project_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"),
     request: CreateDocumentRequest,
+    project_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"),
 ):
     """Create a new document for a project."""
     try:
@@ -1030,9 +1030,9 @@ async def get_project_document(
 
 @router.put("/projects/{project_id}/docs/{doc_id}")
 async def update_project_document(
+    request: UpdateDocumentRequest,
     project_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"),
     doc_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"),
-    request: UpdateDocumentRequest,
 ):
     """Update a document in a project."""
     try:
@@ -1143,8 +1143,8 @@ async def list_project_versions(
 
 @router.post("/projects/{project_id}/versions")
 async def create_project_version(
-    project_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"),
     request: CreateVersionRequest,
+    project_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"),
 ):
     """Create a version snapshot for a project's JSONB field."""
     try:
