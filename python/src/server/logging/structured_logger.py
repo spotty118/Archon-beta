@@ -281,7 +281,7 @@ def log_performance(operation_name: str, logger: Optional[CorrelationLogger] = N
     return decorator
 
 
-async def alog_performance(operation_name: str, logger: Optional[CorrelationLogger] = None):
+def alog_performance(operation_name: str, logger: Optional[CorrelationLogger] = None):
     """Async decorator to log function performance"""
     def decorator(func):
         @wraps(func)
