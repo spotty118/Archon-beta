@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Play, Square, Copy, Clock, Server, AlertCircle, CheckCircle, Loader } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Card } from '../components/ui/Card';
@@ -62,6 +62,21 @@ export const MCPPage = () => {
     0.15
   );
 
+  /**
+   * Load the current MCP server status
+   * Called on mount and every 5 seconds via polling
+   */
+  const loadStatus = useCallback(async () => {
+    try {
+      const status = await mcpServerService.getStatus();
+      setServerStatus(status);
+      setIsLoading(false);
+    } catch (error) {
+      console.error('Failed to load server status:', error);
+      setIsLoading(false);
+    }
+  }, []);
+
   // Smart polling for status updates
   useSmartPolling({
     pollFunction: loadStatus,
@@ -109,20 +124,6 @@ export const MCPPage = () => {
     }
   }, [logs]);
 
-  /**
-   * Load the current MCP server status
-   * Called on mount and every 5 seconds via polling
-   */
-  const loadStatus = async () => {
-    try {
-      const status = await mcpServerService.getStatus();
-      setServerStatus(status);
-      setIsLoading(false);
-    } catch (error) {
-      console.error('Failed to load server status:', error);
-      setIsLoading(false);
-    }
-  };
 
   /**
    * Load the MCP server configuration

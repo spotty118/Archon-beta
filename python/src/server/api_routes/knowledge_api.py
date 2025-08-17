@@ -68,7 +68,7 @@ class KnowledgeItemRequest(BaseModel):
         default="technical",
         min_length=1,
         max_length=50,
-        regex="^[a-zA-Z][a-zA-Z0-9_-]*$",
+        pattern="^[a-zA-Z][a-zA-Z0-9_-]*$",
         description="Knowledge type (alphanumeric, underscore, hyphen)"
     )
     tags: list[str] = Field(
@@ -128,7 +128,7 @@ class CrawlRequest(BaseModel):
         default="general",
         min_length=1,
         max_length=50,
-        regex="^[a-zA-Z][a-zA-Z0-9_-]*$",
+        pattern="^[a-zA-Z][a-zA-Z0-9_-]*$",
         description="Knowledge type"
     )
     tags: list[str] = Field(
@@ -208,7 +208,7 @@ class KnowledgeItemUpdateRequest(BaseModel):
         default=None,
         min_length=1,
         max_length=50,
-        regex="^[a-zA-Z][a-zA-Z0-9_-]*$",
+        pattern="^[a-zA-Z][a-zA-Z0-9_-]*$",
         description="Knowledge type"
     )
     update_frequency: int | None = Field(
@@ -292,7 +292,7 @@ async def get_knowledge_sources():
 async def get_knowledge_items(
     page: Annotated[int, Query(ge=1, le=1000, description="Page number")] = 1,
     per_page: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
-    knowledge_type: Annotated[str | None, Query(max_length=50, regex="^[a-zA-Z][a-zA-Z0-9_-]*$", description="Filter by knowledge type")] = None,
+    knowledge_type: Annotated[str | None, Query(max_length=50, pattern="^[a-zA-Z][a-zA-Z0-9_-]*$", description="Filter by knowledge type")] = None,
     search: Annotated[str | None, Query(max_length=200, description="Search query")] = None
 ):
     """Get knowledge items with pagination and filtering."""
