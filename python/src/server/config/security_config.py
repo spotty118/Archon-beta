@@ -92,7 +92,11 @@ def get_security_settings() -> SecuritySettings:
     # Load from environment
     allowed_origins_env = os.getenv("CORS_ALLOWED_ORIGINS", "").strip()
     if allowed_origins_env:
-        origins = [origin.strip() for origin in allowed_origins_env.split(",")]
+        if allowed_origins_env == "*":
+            # Handle wildcard - allow all origins
+            origins = ["*"]
+        else:
+            origins = [origin.strip() for origin in allowed_origins_env.split(",")]
     else:
         # Default to localhost for development
         origins = None
