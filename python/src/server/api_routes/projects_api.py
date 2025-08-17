@@ -381,8 +381,8 @@ async def get_project(project_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9
 
 @router.put("/projects/{project_id}")
 async def update_project(
-    project_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"),
     request: UpdateProjectRequest,
+    project_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"),
 ):
     """Update a project with comprehensive Logfire monitoring."""
     try:
