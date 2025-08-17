@@ -178,12 +178,12 @@ class BaseAgent(ABC, Generic[DepsT, OutputT]):
     @abstractmethod
     def _create_agent(self, **kwargs) -> Agent:
         """Create and configure the PydanticAI agent. Must be implemented by subclasses."""
-        pass
+        raise NotImplementedError("Subclasses must implement _create_agent()")
 
     @abstractmethod
     def get_system_prompt(self) -> str:
         """Get the system prompt for this agent. Must be implemented by subclasses."""
-        pass
+        raise NotImplementedError("Subclasses must implement get_system_prompt()")
 
     async def run(self, user_prompt: str, deps: DepsT) -> OutputT:
         """

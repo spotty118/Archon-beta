@@ -249,7 +249,7 @@ class BaseStorageService(ABC):
         Returns:
             Storage result with success status and metadata
         """
-        pass
+        raise NotImplementedError("Subclasses must implement store_documents()")
 
     @abstractmethod
     async def process_document(self, document: dict[str, Any], **kwargs) -> dict[str, Any]:
@@ -263,4 +263,4 @@ class BaseStorageService(ABC):
         Returns:
             Processed document with metadata
         """
-        pass
+        raise NotImplementedError("Subclasses must implement process_document()")

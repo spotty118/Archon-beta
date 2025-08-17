@@ -12,6 +12,7 @@ import uuid
 from datetime import datetime
 
 import httpx
+import redis.asyncio as redis
 from fastapi import APIRouter, HTTPException, Depends, status, Path
 from pydantic import BaseModel, Field, validator
 from typing import Literal, Optional
@@ -27,8 +28,64 @@ sio = get_socketio_instance()
 # Create router
 router = APIRouter(prefix="/api/agent-chat", tags=["agent-chat"], dependencies=[Depends(require_authentication)])
 
-# Simple in-memory session storage
-sessions: dict[str, dict] = {}
+# Redis-based session storage for horizontal scalability
+class SessionManager:
+    def __init__(self):
+        self._redis = None
+    
+    async def get_redis(self):
+        if self._redis is None:
+            redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+            redis_password = os.getenv("REDIS_PASSWORD", None)
+            self._redis = redis.from_url(
+                redis_url,
+                password=redis_password,
+                decode_responses=True,
+                socket_connect_timeout=5,
+                socket_keepalive=True,
+                retry_on_timeout=True
+            )
+        return self._redis
+    
+    async def get_session(self, session_id: str) -> dict | None:
+        try:
+            redis_client = await self.get_redis()
+            session_data = await redis_client.get(f"chat_session:{session_id}")
+            if session_data:
+                return json.loads(session_data)
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get session {session_id} from Redis: {e}")
+            return None
+    
+    async def set_session(self, session_id: str, session_data: dict, ttl: int = 3600):
+        try:
+            redis_client = await self.get_redis()
+            await redis_client.setex(
+                f"chat_session:{session_id}",
+                ttl,
+                json.dumps(session_data, default=str)
+            )
+        except Exception as e:
+            logger.error(f"Failed to set session {session_id} in Redis: {e}")
+    
+    async def delete_session(self, session_id: str):
+        try:
+            redis_client = await self.get_redis()
+            await redis_client.delete(f"chat_session:{session_id}")
+        except Exception as e:
+            logger.error(f"Failed to delete session {session_id} from Redis: {e}")
+    
+    async def update_session_messages(self, session_id: str, message: dict):
+        try:
+            session = await self.get_session(session_id)
+            if session:
+                session["messages"].append(message)
+                await self.set_session(session_id, session)
+        except Exception as e:
+            logger.error(f"Failed to update session messages for {session_id}: {e}")
+
+session_manager = SessionManager()
 
 # Message/context size caps (placed before models to avoid NameError)
 MAX_MESSAGE_LEN = 8192
@@ -47,12 +104,33 @@ def is_valid_uuid4(value: str) -> bool:
         return False
 
 
+# Pydantic models for API
+class CreateSessionRequest(BaseModel):
+    project_id: str = Field(..., description="Project ID")
+    agent_type: str = Field(default="rag", description="Agent type")
+    
+    @validator('agent_type')
+    def validate_agent_type(cls, v):
+        if v not in ALLOWED_AGENT_TYPES:
+            raise ValueError(f"Agent type must be one of: {', '.join(ALLOWED_AGENT_TYPES)}")
+        return v
+
+class CreateSessionResponse(BaseModel):
+    session_id: str
+
+class SendMessageRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=MAX_MESSAGE_LEN)
+    context: Optional[dict] = Field(default=None)
+
+class SendMessageResponse(BaseModel):
+    status: str
+
 # REST Endpoints (minimal for frontend compatibility)
 @router.post("/sessions", response_model=CreateSessionResponse)
 async def create_session(request: CreateSessionRequest):
     """Create a new chat session."""
     session_id = str(uuid.uuid4())
-    sessions[session_id] = {
+    session_data = {
         "id": session_id,
         "session_id": session_id,  # Frontend expects this
         "project_id": request.project_id,
@@ -60,6 +138,7 @@ async def create_session(request: CreateSessionRequest):
         "messages": [],
         "created_at": datetime.now().isoformat(),
     }
+    await session_manager.set_session(session_id, session_data)
     logger.info(f"Created chat session {session_id} with agent_type: {request.agent_type}")
     return {"session_id": session_id}
 
@@ -75,9 +154,10 @@ async def get_session(
     )
 ):
     """Get session information."""
-    if session_id not in sessions:
+    session = await session_manager.get_session(session_id)
+    if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    return sessions[session_id]
+    return session
 
 
 @router.post("/sessions/{session_id}/messages", response_model=SendMessageResponse)
@@ -92,7 +172,8 @@ async def send_message(
     request: SendMessageRequest = ...,
 ):
     """REST endpoint for sending messages (triggers Socket.IO event internally)."""
-    if session_id not in sessions:
+    session = await session_manager.get_session(session_id)
+    if not session:
         raise HTTPException(status_code=404, detail="Session not found")
  
     # Model validators already enforce message and context constraints.
@@ -110,7 +191,7 @@ async def send_message(
         "sender": "user",
         "timestamp": datetime.now().isoformat(),
     }
-    sessions[session_id]["messages"].append(user_msg)
+    await session_manager.update_session_messages(session_id, user_msg)
 
     # Emit to Socket.IO room
     await sio.emit("message", {"type": "message", "data": user_msg}, room=f"chat_{session_id}")
@@ -131,7 +212,8 @@ async def join_chat(sid, data):
     if not session_id or not is_valid_uuid4(session_id):
         await sio.emit("error", {"type": "error", "error": "Invalid or missing session_id"}, to=sid)
         return
-    if session_id not in sessions:
+    session = await session_manager.get_session(session_id)
+    if not session:
         await sio.emit("error", {"type": "error", "error": "Session not found"}, to=sid)
         return
     await sio.enter_room(sid, f"chat_{session_id}")
@@ -151,7 +233,8 @@ async def leave_chat(sid, data):
     if not session_id or not is_valid_uuid4(session_id):
         await sio.emit("error", {"type": "error", "error": "Invalid or missing session_id"}, to=sid)
         return
-    if session_id not in sessions:
+    session = await session_manager.get_session(session_id)
+    if not session:
         await sio.emit("error", {"type": "error", "error": "Session not found"}, to=sid)
         return
     await sio.leave_room(sid, f"chat_{session_id}")
@@ -168,7 +251,8 @@ async def chat_message(sid, data):
     if not session_id or not is_valid_uuid4(session_id):
         await sio.emit("error", {"type": "error", "error": "Invalid or missing session_id"}, to=sid)
         return
-    if session_id not in sessions:
+    session = await session_manager.get_session(session_id)
+    if not session:
         await sio.emit("error", {"type": "error", "error": "Session not found"}, to=sid)
         return
     if not message:
@@ -188,18 +272,17 @@ async def chat_message(sid, data):
         await sio.emit("error", {"type": "error", "error": "Invalid context format"}, to=sid)
         return
 
-    # Store user message
-    if session_id in sessions:
-        user_msg = {
-            "id": str(uuid.uuid4()),
-            "content": message,
-            "sender": "user",
-            "timestamp": datetime.now().isoformat(),
-        }
-        sessions[session_id]["messages"].append(user_msg)
+    # Store user message using Redis session manager
+    user_msg = {
+        "id": str(uuid.uuid4()),
+        "content": message,
+        "sender": "user",
+        "timestamp": datetime.now().isoformat(),
+    }
+    await session_manager.update_session_messages(session_id, user_msg)
 
-        # Echo user message to room
-        await sio.emit("message", {"type": "message", "data": user_msg}, room=f"chat_{session_id}")
+    # Echo user message to room
+    await sio.emit("message", {"type": "message", "data": user_msg}, room=f"chat_{session_id}")
 
     # Process agent response
     await process_agent_response(session_id, message, context)
@@ -208,10 +291,11 @@ async def chat_message(sid, data):
 # Helper function to process agent responses
 async def process_agent_response(session_id: str, message: str, context: dict):
     """Stream agent response via SSE and emit to Socket.IO."""
-    if session_id not in sessions:
+    session = await session_manager.get_session(session_id)
+    if not session:
         return
  
-    agent_type = sessions[session_id].get("agent_type", "rag")
+    agent_type = session.get("agent_type", "rag")
     if agent_type not in ALLOWED_AGENT_TYPES:
         agent_type = "rag"
     room = f"chat_{session_id}"
@@ -273,8 +357,8 @@ async def process_agent_response(session_id: str, message: str, context: dict):
                     "timestamp": datetime.now().isoformat(),
                 }
 
-                # Store in session
-                sessions[session_id]["messages"].append(agent_msg)
+                # Store in session using Redis session manager
+                await session_manager.update_session_messages(session_id, agent_msg)
 
                 # Emit complete message
                 await sio.emit("message", {"type": "message", "data": agent_msg}, room=room)

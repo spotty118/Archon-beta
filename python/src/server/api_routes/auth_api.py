@@ -5,6 +5,8 @@ Handles user authentication, token management, and session control.
 
 from datetime import datetime, timedelta
 from typing import Optional
+import secrets
+import os
 
 from fastapi import APIRouter, HTTPException, Depends, Request, status
 from fastapi.security import HTTPBearer
@@ -55,6 +57,21 @@ class UserResponse(BaseModel):
     full_name: Optional[str]
     created_at: datetime
     is_active: bool
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(..., min_length=32, max_length=128)
+    new_password: str = Field(..., min_length=8, max_length=100)
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str = Field(..., min_length=1)
+
+class RefreshTokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a plaintext password against its hash."""
@@ -406,6 +423,256 @@ async def get_encryption_params(request: Request):
     except Exception as e:
         logger.error(f"Failed to get encryption params: {e}")
         raise HTTPException(status_code=500, detail="Failed to get encryption parameters")
+
+@router.post("/forgot-password")
+async def forgot_password(request: ForgotPasswordRequest):
+    """Initiate password reset process by sending reset token to user's email."""
+    try:
+        email = validate_input(str(request.email), "email")
+        
+        logger.info(f"Password reset requested for email: {email}")
+        
+        supabase = get_supabase_client()
+        
+        # Check if user exists
+        try:
+            result = supabase.table("users").select("id,username,email").eq("email", email).execute()
+            
+            if not result.data:
+                # For security, don't reveal if email exists or not
+                logger.warning(f"Password reset requested for non-existent email: {email}")
+                return {"message": "If this email is registered, you will receive a password reset link"}
+            
+            user = result.data[0]
+            
+            # Generate secure reset token
+            reset_token = secrets.token_urlsafe(32)
+            reset_expires = datetime.utcnow() + timedelta(hours=1)  # 1 hour expiry
+            
+            # Store reset token in database (you'll need to create password_reset_tokens table)
+            # For now, store in Redis with TTL
+            try:
+                from ..services.cache_service import cache_service
+                await cache_service.set(
+                    f"password_reset:{reset_token}",
+                    user["id"],
+                    ttl=3600  # 1 hour
+                )
+                logger.info(f"Password reset token generated for user: {user['username']}")
+            except Exception as e:
+                logger.error(f"Failed to store reset token: {e}")
+                raise HTTPException(status_code=500, detail="Failed to generate reset token")
+            
+            # TODO: Send email with reset link
+            # In production, integrate with email service (SendGrid, AWS SES, etc.)
+            logger.info(f"Password reset email would be sent to: {email}")
+            logger.info(f"Reset token (for testing): {reset_token}")
+            
+            return {"message": "If this email is registered, you will receive a password reset link"}
+            
+        except Exception as e:
+            if isinstance(e, HTTPException):
+                raise
+            logger.error(f"Database error during password reset: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Password reset service error"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Password reset error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Password reset failed"
+        )
+
+@router.post("/reset-password")
+async def reset_password(request: ResetPasswordRequest):
+    """Reset password using valid reset token."""
+    try:
+        token = validate_input(request.token, "token")
+        new_password = validate_input(request.new_password, "password")
+        
+        logger.info(f"Password reset attempt with token: {token[:8]}...")
+        
+        # Check password strength
+        if len(new_password) < 8:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Password must be at least 8 characters long"
+            )
+        
+        # Validate reset token
+        try:
+            from ..services.cache_service import cache_service
+            user_id = await cache_service.get(f"password_reset:{token}")
+            
+            if not user_id:
+                logger.warning(f"Invalid or expired reset token: {token[:8]}...")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid or expired reset token"
+                )
+                
+        except Exception as e:
+            logger.error(f"Failed to validate reset token: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Token validation failed"
+            )
+        
+        supabase = get_supabase_client()
+        
+        # Update user password
+        try:
+            password_hash = get_password_hash(new_password)
+            
+            result = supabase.table("users").update({
+                "password_hash": password_hash,
+                "updated_at": datetime.utcnow().isoformat()
+            }).eq("id", user_id).execute()
+            
+            if not result.data:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="User not found"
+                )
+            
+            # Invalidate the reset token
+            try:
+                from ..services.cache_service import cache_service
+                await cache_service.delete(f"password_reset:{token}")
+            except Exception as e:
+                logger.warning(f"Failed to invalidate reset token: {e}")
+            
+            logger.info(f"Password reset successful for user: {user_id}")
+            
+            return {"message": "Password reset successful"}
+            
+        except Exception as e:
+            if isinstance(e, HTTPException):
+                raise
+            logger.error(f"Database error during password update: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Password update failed"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Password reset completion error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Password reset failed"
+        )
+
+@router.post("/refresh", response_model=RefreshTokenResponse)
+async def refresh_access_token(request: RefreshTokenRequest):
+    """Refresh access token using valid refresh token."""
+    try:
+        refresh_token = validate_input(request.refresh_token, "refresh_token")
+        
+        logger.info(f"Token refresh attempt")
+        
+        # Validate refresh token from Redis
+        try:
+            from ..services.cache_service import cache_service
+            user_data = await cache_service.get(f"refresh_token:{refresh_token}")
+            
+            if not user_data:
+                logger.warning("Invalid or expired refresh token")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid or expired refresh token"
+                )
+            
+            # Parse user data from cache
+            if isinstance(user_data, str):
+                import json
+                user_info = json.loads(user_data)
+            else:
+                user_info = user_data
+                
+            user_id = user_info.get("user_id")
+            username = user_info.get("username")
+            
+            if not user_id or not username:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid refresh token data"
+                )
+                
+        except Exception as e:
+            if isinstance(e, HTTPException):
+                raise
+            logger.error(f"Failed to validate refresh token: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Token validation failed"
+            )
+        
+        # Verify user still exists and is active
+        supabase = get_supabase_client()
+        try:
+            result = supabase.table("users").select("id,username,is_active").eq("id", user_id).execute()
+            
+            if not result.data:
+                logger.warning(f"Refresh token user not found: {user_id}")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="User not found"
+                )
+            
+            user = result.data[0]
+            
+            if not user.get("is_active", False):
+                logger.warning(f"Refresh token for inactive user: {username}")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Account is disabled"
+                )
+                
+        except Exception as e:
+            if isinstance(e, HTTPException):
+                raise
+            logger.error(f"Database error during refresh validation: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="User validation failed"
+            )
+        
+        # Create new access token
+        security_settings = get_security_settings()
+        token_data = {
+            "sub": user_id,
+            "username": username,
+            "scopes": ["user"]
+        }
+        
+        access_token = create_access_token(
+            data=token_data,
+            expires_delta=timedelta(minutes=security_settings.access_token_expire_minutes)
+        )
+        
+        logger.info(f"Token refreshed successfully for user: {username}")
+        
+        return RefreshTokenResponse(
+            access_token=access_token,
+            token_type="bearer",
+            expires_in=security_settings.access_token_expire_minutes * 60
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Token refresh error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Token refresh failed"
+        )
 
 # Health check for auth service
 @router.get("/health")

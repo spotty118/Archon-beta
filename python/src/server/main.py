@@ -328,7 +328,6 @@ async def skip_health_check_logs(request, call_next):
 # Include API routers
 app.include_router(settings_router)
 app.include_router(mcp_router)
-# app.include_router(mcp_client_router)  # Removed - not part of new architecture
 app.include_router(knowledge_router)
 app.include_router(projects_router)
 app.include_router(tests_router)
