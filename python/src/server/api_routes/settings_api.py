@@ -28,7 +28,7 @@ class CredentialRequest(BaseModel):
         ...,
         min_length=1,
         max_length=100,
-        regex="^[A-Z][A-Z0-9_]*$",
+        pattern="^[A-Z][A-Z0-9_]*$",
         description="Credential key (uppercase, alphanumeric, underscores)"
     )
     value: str = Field(
@@ -45,7 +45,7 @@ class CredentialRequest(BaseModel):
         default=None,
         min_length=1,
         max_length=50,
-        regex="^[a-zA-Z][a-zA-Z0-9_-]*$",
+        pattern="^[a-zA-Z][a-zA-Z0-9_-]*$",
         description="Credential category (alphanumeric, underscore, hyphen)"
     )
     description: str | None = Field(
@@ -103,7 +103,7 @@ class CredentialUpdateRequest(BaseModel):
         default=None,
         min_length=1,
         max_length=50,
-        regex="^[a-zA-Z][a-zA-Z0-9_-]*$",
+        pattern="^[a-zA-Z][a-zA-Z0-9_-]*$",
         description="Credential category"
     )
     description: str | None = Field(
@@ -140,7 +140,7 @@ class CredentialResponse(BaseModel):
 # Credential Management Endpoints
 @router.get("/credentials")
 async def list_credentials(
-    category: Annotated[str | None, Query(max_length=50, regex="^[a-zA-Z][a-zA-Z0-9_-]*$", description="Filter by credential category")] = None
+    category: Annotated[str | None, Query(max_length=50, pattern="^[a-zA-Z][a-zA-Z0-9_-]*$", description="Filter by credential category")] = None
 ):
     """List all credentials and their categories."""
     try:
@@ -174,7 +174,7 @@ async def list_credentials(
 
 @router.get("/credentials/categories/{category}")
 async def get_credentials_by_category(
-    category: Annotated[str, Path(min_length=1, max_length=50, regex="^[a-zA-Z][a-zA-Z0-9_-]*$", description="Credential category")]
+    category: Annotated[str, Path(min_length=1, max_length=50, pattern="^[a-zA-Z][a-zA-Z0-9_-]*$", description="Credential category")]
 ):
     """Get all credentials for a specific category."""
     try:
@@ -240,7 +240,7 @@ OPTIONAL_SETTINGS_WITH_DEFAULTS = {
 
 @router.get("/credentials/{key}")
 async def get_credential(
-    key: Annotated[str, Path(min_length=1, max_length=100, regex="^[A-Z][A-Z0-9_]*$", description="Credential key")],
+    key: Annotated[str, Path(min_length=1, max_length=100, pattern="^[A-Z][A-Z0-9_]*$", description="Credential key")],
     decrypt: Annotated[bool, Query(description="Whether to decrypt the credential value")] = True
 ):
     """Get a specific credential by key."""
@@ -286,7 +286,7 @@ async def get_credential(
 
 @router.put("/credentials/{key}")
 async def update_credential(
-    key: Annotated[str, Path(min_length=1, max_length=100, regex="^[A-Z][A-Z0-9_]*$", description="Credential key")],
+    key: Annotated[str, Path(min_length=1, max_length=100, pattern="^[A-Z][A-Z0-9_]*$", description="Credential key")],
     request: dict[str, Any]
 ):
     """Update an existing credential."""
@@ -349,7 +349,7 @@ async def update_credential(
 
 @router.delete("/credentials/{key}")
 async def delete_credential(
-    key: Annotated[str, Path(min_length=1, max_length=100, regex="^[A-Z][A-Z0-9_]*$", description="Credential key")]
+    key: Annotated[str, Path(min_length=1, max_length=100, pattern="^[A-Z][A-Z0-9_]*$", description="Credential key")]
 ):
     """Delete a credential."""
     try:
