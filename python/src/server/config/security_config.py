@@ -86,9 +86,8 @@ class SecuritySettings(BaseModel):
         env_prefix = "SECURITY_"
 
 
-@lru_cache()
 def get_security_settings() -> SecuritySettings:
-    """Get cached security settings."""
+    """Get security settings (cache removed for dynamic config updates)."""
     # Load from environment
     allowed_origins_env = os.getenv("CORS_ALLOWED_ORIGINS", "").strip()
     if allowed_origins_env:
@@ -115,6 +114,11 @@ def get_security_settings() -> SecuritySettings:
             import logging
             logger = logging.getLogger(__name__)
             logger.warning("CORS wildcard (*) with credentials=true is a security risk in production")
+
+    # Debug logging for CORS configuration
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"CORS Configuration - Origins: {origins}, Credentials: {allow_credentials}")
 
     # Enforce JWT secret policy
     dev_mode = os.getenv("DEV_MODE", "false").lower() == "true"
