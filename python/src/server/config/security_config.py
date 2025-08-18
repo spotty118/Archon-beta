@@ -101,6 +101,21 @@ def get_security_settings() -> SecuritySettings:
         # Default to localhost for development
         origins = None
 
+    # Load CORS credentials setting from environment
+    allow_credentials_env = os.getenv("CORS_ALLOW_CREDENTIALS", "true").lower()
+    allow_credentials = allow_credentials_env in ("true", "1", "yes")
+    
+    # Important: When using wildcard origins (*), credentials must be false for security
+    # But we'll allow it in development mode or if explicitly configured
+    if origins and "*" in origins and allow_credentials:
+        # In production, this is a security risk, but allow it if explicitly set
+        dev_mode = os.getenv("DEV_MODE", "false").lower() == "true"
+        if not dev_mode:
+            # Log warning but allow it since it's explicitly configured
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning("CORS wildcard (*) with credentials=true is a security risk in production")
+
     # Enforce JWT secret policy
     dev_mode = os.getenv("DEV_MODE", "false").lower() == "true"
     jwt_secret = os.getenv("JWT_SECRET_KEY")
@@ -117,6 +132,7 @@ def get_security_settings() -> SecuritySettings:
 
     return SecuritySettings(
         allowed_origins=origins if origins else default_allowed,
+        allow_credentials=allow_credentials,
         secret_key=jwt_secret or secrets.token_urlsafe(32),
     )
 
