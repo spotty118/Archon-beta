@@ -27,7 +27,7 @@ export const ContextSection: React.FC<SectionProps> = ({
       return <CheckCircle2 className="w-4 h-4 text-gray-500" />;
     };
     
-    const getItemColor = (itemKey: string) => {
+    const getItemColor = (itemKey: string): keyof typeof colorMap => {
       const normalizedKey = itemKey.toLowerCase();
       if (normalizedKey.includes('scope')) return 'blue';
       if (normalizedKey.includes('background')) return 'purple';
@@ -48,7 +48,7 @@ export const ContextSection: React.FC<SectionProps> = ({
     const itemTitle = key.replace(/_/g, ' ').charAt(0).toUpperCase() + key.replace(/_/g, ' ').slice(1);
     
     return (
-      <div key={key} className={`p-4 rounded-lg border ${colorMap[color as keyof typeof colorMap]}`}>
+      <div key={key} className={`p-4 rounded-lg border ${colorMap[color]}`}>
         <h4 className="font-semibold text-gray-800 dark:text-white mb-2 flex items-center gap-2">
           {getItemIcon(key)}
           {itemTitle}

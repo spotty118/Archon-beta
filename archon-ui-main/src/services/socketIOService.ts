@@ -13,6 +13,7 @@
  */
 
 import { io, Socket } from 'socket.io-client';
+import { getApiUrl } from '../config/api';
 
 export enum WebSocketState {
   CONNECTING = 'CONNECTING',
@@ -143,15 +144,15 @@ export class WebSocketService {
     // Use relative URL to go through Vite's proxy
     const socketPath = '/socket.io/';  // Use default Socket.IO path
     
-    // Use window.location.origin to ensure we go through the proxy
-    const connectionUrl = window.location.origin;
+    // Use the existing API URL configuration
+    const connectionUrl = getApiUrl();
     
     try {
       console.log('🔗 Attempting Socket.IO connection to:', connectionUrl);
       console.log('🔗 Socket.IO path:', socketPath);
       console.log('🔗 Session ID:', this.sessionId);
       
-      // Connect to default namespace with explicit origin to ensure proxy usage
+      // Connect to default namespace with backend URL
       this.socket = io(connectionUrl, {
         reconnection: this.config.enableAutoReconnect,
         reconnectionAttempts: this.config.maxReconnectAttempts,

@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   Brain, Users, Workflow, BarChart3, Clock, Shield, 
-  Code, Layers, FileText, List, Hash, Box 
+  Code, Layers, FileText, List, Box 
 } from 'lucide-react';
 import { detectSectionType, formatSectionTitle } from '../utils/sectionDetector';
 import { getAccentColor } from '../utils/formatters';

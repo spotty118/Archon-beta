@@ -20,75 +20,7 @@ import { Layout, Component as ComponentIcon, X, Trash2, Edit, Save } from 'lucid
 import { projectService } from '../../services'
 import { useToast } from '../../contexts/ToastContext'
 
-// Define custom node types following React Flow v12 pattern
-type PageNodeData = {
-  label: string;
-  type: string;
-  route: string;
-  components: number;
-};
-
-type ServiceNodeData = {
-  label: string;
-  type: string;
-};
-
-// Define union type for all custom nodes
-
-// Custom node components
-const PageNode = ({ data }: NodeProps) => {
-  const pageData = data as PageNodeData;
-  return (
-    <div className="relative group">
-      <Handle
-        type="target"
-        position={Position.Top}
-        className="w-3 h-3 !bg-cyan-400 transition-all duration-300 !opacity-60 group-hover:!opacity-100 group-hover:!shadow-[0_0_8px_rgba(34,211,238,0.6)]"
-      />
-      <div className="p-4 rounded-lg bg-[#1a2c3b]/80 border border-cyan-500/30 min-w-[200px] backdrop-blur-sm transition-all duration-300 group-hover:border-cyan-500/70 group-hover:shadow-[0_5px_15px_rgba(34,211,238,0.15)]">
-        <div className="flex items-center gap-2 mb-2">
-          <Layout className="w-4 h-4 text-cyan-400" />
-          <div className="text-sm font-bold text-cyan-400">{pageData.label}</div>
-        </div>
-        <div className="text-xs text-gray-400">{pageData.type}</div>
-        <div className="mt-2 text-xs text-gray-500">
-          <div>Route: {pageData.route}</div>
-          <div>Components: {pageData.components}</div>
-        </div>
-      </div>
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        className="w-3 h-3 !bg-cyan-400 transition-all duration-300 !opacity-60 group-hover:!opacity-100 group-hover:!shadow-[0_0_8px_rgba(34,211,238,0.6)]"
-      />
-    </div>
-  );
-};
-
-const ServiceNode = ({ data }: NodeProps) => {
-  const serviceData = data as ServiceNodeData;
-  return (
-    <div className="relative group">
-      <Handle
-        type="target"
-        position={Position.Top}
-        className="w-3 h-3 !bg-fuchsia-400 transition-all duration-300 !opacity-60 group-hover:!opacity-100 group-hover:!shadow-[0_0_8px_rgba(217,70,239,0.6)]"
-      />
-      <div className="p-4 rounded-lg bg-[#2d1a3b]/80 border border-fuchsia-500/30 min-w-[200px] backdrop-blur-sm transition-all duration-300 group-hover:border-fuchsia-500/70 group-hover:shadow-[0_5px_15px_rgba(217,70,239,0.15)]">
-        <div className="flex items-center gap-2 mb-2">
-          <ComponentIcon className="w-4 h-4 text-fuchsia-400" />
-          <div className="text-sm font-bold text-fuchsia-400">{serviceData.label}</div>
-        </div>
-        <div className="text-xs text-gray-400">{serviceData.type}</div>
-      </div>
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        className="w-3 h-3 !bg-fuchsia-400 transition-all duration-300 !opacity-60 group-hover:!opacity-100 group-hover:!shadow-[0_0_8px_rgba(217,70,239,0.6)]"
-      />
-    </div>
-  );
-};
+ // Custom node components defined dynamically inside nodeTypes (removed unused static component definitions)
 
 
 

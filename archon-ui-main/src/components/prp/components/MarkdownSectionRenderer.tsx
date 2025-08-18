@@ -2,7 +2,6 @@ import React from 'react';
 import { ParsedSection } from '../utils/markdownParser';
 import { SectionRenderer } from '../renderers/SectionRenderer';
 import { SimpleMarkdown } from './SimpleMarkdown';
-import { detectSectionType } from '../utils/sectionDetector';
 
 interface MarkdownSectionRendererProps {
   section: ParsedSection;
@@ -23,8 +22,6 @@ export const MarkdownSectionRenderer: React.FC<MarkdownSectionRendererProps> = (
 }) => {
   // If section matches a known PRP template, use the specialized component
   if (section.templateType) {
-    const { type } = detectSectionType(section.sectionKey, section.rawContent);
-    
     // Use the existing SectionRenderer with the detected type
     return (
       <div className="mb-6">

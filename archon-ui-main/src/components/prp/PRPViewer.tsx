@@ -19,7 +19,7 @@ interface PRPViewerProps {
 const processContent = (content: any): any => {
   if (typeof content === 'string') {
     // Replace [Image #N] with proper markdown image syntax
-    return content.replace(/\[Image #(\d+)\]/g, (match, num) => {
+      return content.replace(/\[Image #(\d+)\]/g, (_match, num) => {
       return `![Image ${num}](placeholder-image-${num})`;
     });
   }

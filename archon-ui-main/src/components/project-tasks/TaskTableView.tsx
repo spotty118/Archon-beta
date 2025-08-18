@@ -5,7 +5,6 @@ import { useToast } from '../../contexts/ToastContext';
 import { DeleteConfirmModal } from '../../pages/ProjectPage';
 import { projectService } from '../../services';
 import { ItemTypes, getAssigneeIcon, getAssigneeGlow, getOrderGlow } from '../../lib/task-utils';
-import { DraggableTaskCard } from './DraggableTaskCard';
 
 export interface Task {
   id: string;
@@ -563,12 +562,9 @@ export const TaskTableView = ({
     const rowRect = rowElement.getBoundingClientRect();
     
     // Calculate the row's position relative to the container
-    const rowCenter = rowRect.top + rowRect.height / 2;
-    const containerCenter = containerRect.top + containerRect.height / 2;
     const containerHeight = containerRect.height;
     
     // Distance from center (0 at center, 1 at edges)
-    const distanceFromCenter = Math.abs(rowCenter - containerCenter) / (containerHeight / 2);
     
     // Create a smooth fade effect
     // Rows at the top 40% of viewport get full opacity
