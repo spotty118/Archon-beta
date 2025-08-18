@@ -275,16 +275,34 @@ from .middleware.auth_middleware import setup_authentication_middleware
 from .middleware.security_middleware import setup_security_middleware
 from .middleware.rate_limit_middleware import setup_rate_limiting
 
-# Get security settings
-security_settings = get_security_settings()
+# Configure CORS with direct environment variable reading to avoid caching issues
+cors_origins = os.getenv("CORS_ALLOWED_ORIGINS", "").strip()
+if cors_origins:
+    if cors_origins == "*":
+        allowed_origins = ["*"]
+    else:
+        allowed_origins = [origin.strip() for origin in cors_origins.split(",")]
+else:
+    # Fallback to default localhost origins
+    allowed_origins = [
+        "http://localhost:3737",
+        "http://127.0.0.1:3737", 
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+
+cors_credentials = os.getenv("CORS_ALLOW_CREDENTIALS", "true").lower() in ("true", "1", "yes")
+
+# Log CORS configuration for debugging
+logger.info(f"🔗 CORS Configuration - Origins: {allowed_origins}, Credentials: {cors_credentials}")
 
 # Configure CORS with secure settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=security_settings.allowed_origins,  # Restricted to specific origins
-    allow_credentials=security_settings.allow_credentials,
-    allow_methods=security_settings.allowed_methods,
-    allow_headers=security_settings.allowed_headers,
+    allow_origins=allowed_origins,
+    allow_credentials=cors_credentials,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["*"],
 )
 
 # Setup comprehensive security middleware stack
