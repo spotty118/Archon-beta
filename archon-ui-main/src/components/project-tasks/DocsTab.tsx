@@ -1,15 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, X, Search, Upload, Link as LinkIcon, Check, Brain, Save, History, Eye, Edit3, Sparkles } from 'lucide-react';
+import { Plus, X, Search, Upload, Link as LinkIcon, Check, Brain, Save, History, Edit3, Sparkles } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { knowledgeBaseService, KnowledgeItem } from '../../services/knowledgeBaseService';
-import { projectService } from '../../services/projectService';
+import { projectService } from '../../services';
 import { useToast } from '../../contexts/ToastContext';
 import { Input } from '../ui/Input';
 import { Card } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { Select } from '../ui/Select';
 import { CrawlProgressData, crawlProgressService } from '../../services/crawlProgressService';
-import { WebSocketState } from '../../services/socketIOService';
 import { MilkdownEditor } from './MilkdownEditor';
 import { VersionHistoryModal } from './VersionHistoryModal';
 import { PRPViewer } from '../prp';
@@ -21,10 +20,10 @@ import { DocumentCard, NewDocumentCard } from './DocumentCard';
 interface ProjectDoc {
   id: string;
   title: string;
-  created_at: string;
+  created_at?: string;
   updated_at: string;
-  // Content field stores markdown or structured data
-  content?: any;
+  // Content field stores markdown or structured data (required for DocumentCard)
+  content: any;
   document_type?: string;
 }
 
@@ -500,16 +499,17 @@ Add your content here...
 /* Main component                                 */
 /* ——————————————————————————————————————————— */
 export const DocsTab = ({
-  tasks,
-  project
+  project,
+  tasks: _tasks,
 }: {
-  tasks: Task[];
   project?: {
     id: string;
     title: string;
     created_at?: string;
     updated_at?: string;
+    docs?: any[]; // optional docs array stored on project data
   } | null;
+  tasks?: Task[];
 }) => {
   // Document state
   const [documents, setDocuments] = useState<ProjectDoc[]>([]);
@@ -555,23 +555,26 @@ export const DocsTab = ({
   const [showAddSourceModal, setShowAddSourceModal] = useState(false);
   const [sourceType, setSourceType] = useState<'technical' | 'business'>('technical');
   const [knowledgeItems, setKnowledgeItems] = useState<KnowledgeItem[]>([]);
-  const [progressItems, setProgressItems] = useState<CrawlProgressData[]>([]);
+  const [, setProgressItems] = useState<CrawlProgressData[]>([]);
   const { showToast } = useToast();
 
   // Load project documents from the project data
   const loadProjectDocuments = async () => {
-    if (!project?.id || !project.docs) return;
+    if (!project?.id) return;
     
     try {
       setLoading(true);
       
-      // Use the docs directly from the project data
-      const projectDocuments: ProjectDoc[] = project.docs.map((doc: any) => ({
-        id: doc.id,
+      // Safely get docs array from project (it may be stored in project.data or project.docs)
+      const docsArray: any[] = (project as any).docs || [];
+      
+      // Use the docs directly from the project data, providing safe defaults
+      const projectDocuments: ProjectDoc[] = docsArray.map((doc: any) => ({
+        id: String(doc.id),
         title: doc.title || 'Untitled Document',
-        created_at: doc.created_at,
-        updated_at: doc.updated_at,
-        content: doc.content,
+        created_at: String(doc.created_at || new Date().toISOString()),
+        updated_at: String(doc.updated_at || new Date().toISOString()),
+        content: doc.content || {},
         document_type: doc.document_type || 'document'
       }));
       
@@ -936,7 +939,7 @@ export const DocsTab = ({
                 key={doc.id}
                 document={doc}
                 isActive={selectedDocument?.id === doc.id}
-                onSelect={setSelectedDocument}
+                onSelect={(d) => setSelectedDocument(d)}
                 onDelete={async (docId) => {
                   try {
                     // Remove from local state
@@ -974,7 +977,11 @@ export const DocsTab = ({
             </div>
           ) : (
             <MilkdownEditor
-              document={selectedDocument}
+              document={{
+                ...selectedDocument,
+                created_at: selectedDocument?.created_at ?? new Date().toISOString(),
+                updated_at: selectedDocument?.updated_at ?? new Date().toISOString(),
+              }}
               isDarkMode={isDarkMode}
               onSave={async (updatedDocument) => {
                 try {
@@ -1112,7 +1119,7 @@ const TemplateModal: React.FC<{
 }> = ({ onClose, onSelectTemplate, isCreating }) => {
   const templates = Object.entries(DOCUMENT_TEMPLATES);
 
-  const getTemplateDescription = (key: string, template: any) => {
+  const getTemplateDescription = (key: string, _template: any) => {
     const descriptions: Record<string, string> = {
       'prp_base': 'Comprehensive template for implementing new features with full context, validation loops, and structured implementation blueprint.',
       'prp_task': 'Focused template for specific tasks or bug fixes with clear steps and validation criteria.',

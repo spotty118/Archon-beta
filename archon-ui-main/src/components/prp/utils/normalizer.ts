@@ -6,8 +6,9 @@
  * Normalizes image placeholders to proper markdown format
  */
 export function normalizeImagePlaceholders(content: string): string {
-  return content.replace(/\[Image #(\d+)\]/g, (match, num) => {
-    return `![Image ${num}](placeholder-image-${num})`;
+  return content.replace(/\[Image #(\d+)\]/g, (_match, num) => {
+    // Remove placeholder URL pattern; keep alt text only until real image resolution available
+    return `![Image ${num}]`;
   });
 }
 

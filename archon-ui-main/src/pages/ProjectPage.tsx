@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useToast } from '../contexts/ToastContext';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useStaggeredEntrance } from '../hooks/useStaggeredEntrance';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/project-tasks/Tabs';
 import { DocsTab } from '../components/project-tasks/DocsTab';
@@ -8,10 +8,11 @@ import { DocsTab } from '../components/project-tasks/DocsTab';
 // import { DataTab } from '../components/project-tasks/DataTab';
 import { TasksTab } from '../components/project-tasks/TasksTab';
 import { Button } from '../components/ui/Button';
-import { ChevronRight, ShoppingCart, Code, Briefcase, Layers, Plus, X, AlertCircle, Loader2, Heart, BarChart3, Trash2, Pin, ListTodo, Activity, CheckCircle2, Clipboard } from 'lucide-react';
+import { Plus, X, AlertCircle, Loader2, Trash2, Pin, ListTodo, Activity, CheckCircle2 } from 'lucide-react';
+import { CopyToClipboardButton } from '../components/ui/CopyToClipboardButton';
 
 // Import our service layer and types
-import { projectService } from '../services/projectService';
+import { projectService } from '../services';
 import type { Project, CreateProjectRequest } from '../types/project';
 import type { Task } from '../components/project-tasks/TaskTableView';
 import { ProjectCreationProgressCard } from '../components/ProjectCreationProgressCard';
@@ -24,18 +25,7 @@ interface ProjectPageProps {
   'data-id'?: string;
 }
 
-// Icon mapping for projects (since database stores icon names as strings)
-const getProjectIcon = (iconName?: string) => {
-  const iconMap = {
-    'ShoppingCart': <ShoppingCart className="w-5 h-5" />,
-    'Briefcase': <Briefcase className="w-5 h-5" />,
-    'Code': <Code className="w-5 h-5" />,
-    'Layers': <Layers className="w-5 h-5" />,
-    'BarChart': <BarChart3 className="w-5 h-5" />,
-    'Heart': <Heart className="w-5 h-5" />,
-  };
-  return iconMap[iconName as keyof typeof iconMap] || <Briefcase className="w-5 h-5" />;
-};
+// (Removed unused getProjectIcon)
 
 export function ProjectPage({
   className = '',
@@ -65,10 +55,8 @@ export function ProjectPage({
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   
   // Handler for retrying project creation
-  const handleRetryProjectCreation = (progressId: string) => {
-    // Remove the failed project
-    setProjects((prev) => prev.filter(p => p.id !== `temp-${progressId}`));
-    // Re-open the modal for retry
+  const handleRetryProjectCreation = (_progressId: string) => {
+    // Retry simply re-opens modal; no temp project artifacts maintained
     setIsNewProjectModalOpen(true);
   };
 
@@ -77,6 +65,28 @@ export function ProjectPage({
   const [projectToDelete, setProjectToDelete] = useState<{ id: string; title: string } | null>(null);
 
   const { showToast } = useToast();
+
+  // Load task counts for all projects (defined early to satisfy hooks ordering for later effects)
+  const loadTaskCountsForAllProjects = useCallback(async (projectIds: string[]) => {
+    try {
+      const counts: Record<string, { todo: number; doing: number; done: number }> = {};
+      for (const projectId of projectIds) {
+        try {
+          const tasksData = await projectService.getTasksByProject(projectId);
+          const todos = tasksData.filter(t => t.uiStatus === 'backlog').length;
+          const doing = tasksData.filter(t => t.uiStatus === 'in-progress' || t.uiStatus === 'review').length;
+          const done = tasksData.filter(t => t.uiStatus === 'complete').length;
+          counts[projectId] = { todo: todos, doing, done };
+        } catch (error) {
+          console.error(`Failed to load tasks for project ${projectId}:`, error);
+          counts[projectId] = { todo: 0, doing: 0, done: 0 };
+        }
+      }
+      setProjectTaskCounts(counts);
+    } catch (error) {
+      console.error('Failed to load task counts:', error);
+    }
+  }, []);
 
   // Load projects on mount - simplified approach
   useEffect(() => {
@@ -149,7 +159,7 @@ export function ProjectPage({
     };
     
     loadProjectsData();
-  }, []); // Only run once on mount
+  }, [loadTaskCountsForAllProjects]);
 
   // Set up Socket.IO for real-time project list updates (after initial load)
   useEffect(() => {
@@ -172,11 +182,7 @@ export function ProjectPage({
               return a.title.localeCompare(b.title);
             });
             
-            setProjects(prev => {
-              // Keep temp projects and merge with real projects
-              const tempProjects = prev.filter(p => p.id.startsWith('temp-'));
-              return [...tempProjects, ...sortedProjects];
-            });
+            setProjects([...sortedProjects]);
             
             // Refresh task counts
             const projectIds = sortedProjects.map(p => p.id);
@@ -201,32 +207,9 @@ export function ProjectPage({
       projectListSocketIO.disconnect();
       cleanup.then(cleanupFn => cleanupFn && cleanupFn());
     };
-  }, []); // Only run once on mount
+  }, [loadTaskCountsForAllProjects]);
 
-  // Load task counts for all projects
-  const loadTaskCountsForAllProjects = useCallback(async (projectIds: string[]) => {
-    try {
-      const counts: Record<string, { todo: number; doing: number; done: number }> = {};
-      
-      for (const projectId of projectIds) {
-        try {
-          const tasksData = await projectService.getTasksByProject(projectId);
-          const todos = tasksData.filter(t => t.uiStatus === 'backlog').length;
-          const doing = tasksData.filter(t => t.uiStatus === 'in-progress' || t.uiStatus === 'review').length;
-          const done = tasksData.filter(t => t.uiStatus === 'complete').length;
-          
-          counts[projectId] = { todo: todos, doing, done };
-        } catch (error) {
-          console.error(`Failed to load tasks for project ${projectId}:`, error);
-          counts[projectId] = { todo: 0, doing: 0, done: 0 };
-        }
-      }
-      
-      setProjectTaskCounts(counts);
-    } catch (error) {
-      console.error('Failed to load task counts:', error);
-    }
-  }, []);
+  // (moved earlier)
 
   // Load tasks when project is selected
   useEffect(() => {
@@ -250,25 +233,25 @@ export function ProjectPage({
     // Define handlers outside so they can be removed in cleanup
     const handleTaskCreated = () => {
       console.log('✅ Task created - refreshing counts for all projects');
-      const projectIds = projects.map(p => p.id).filter(id => !id.startsWith('temp-'));
+  const projectIds = projects.map(p => p.id);
       loadTaskCountsForAllProjects(projectIds);
     };
     
     const handleTaskUpdated = () => {
       console.log('✅ Task updated - refreshing counts for all projects');
-      const projectIds = projects.map(p => p.id).filter(id => !id.startsWith('temp-'));
+  const projectIds = projects.map(p => p.id);
       loadTaskCountsForAllProjects(projectIds);
     };
     
     const handleTaskDeleted = () => {
       console.log('✅ Task deleted - refreshing counts for all projects');
-      const projectIds = projects.map(p => p.id).filter(id => !id.startsWith('temp-'));
+  const projectIds = projects.map(p => p.id);
       loadTaskCountsForAllProjects(projectIds);
     };
     
     const handleTaskArchived = () => {
       console.log('✅ Task archived - refreshing counts for all projects');
-      const projectIds = projects.map(p => p.id).filter(id => !id.startsWith('temp-'));
+  const projectIds = projects.map(p => p.id);
       loadTaskCountsForAllProjects(projectIds);
     };
     
@@ -304,7 +287,8 @@ export function ProjectPage({
       taskUpdateSocketIO.removeMessageHandler('task_deleted', handleTaskDeleted);
       taskUpdateSocketIO.removeMessageHandler('task_archived', handleTaskArchived);
     };
-  }, [selectedProject?.id]);
+  // Dependencies: selectedProject, projects, loadTaskCountsForAllProjects provide stable references
+  }, [selectedProject, selectedProject?.id, projects, loadTaskCountsForAllProjects]);
 
   const loadProjects = async () => {
     try {
@@ -493,7 +477,7 @@ export function ProjectPage({
       console.error('Failed to update project pin status:', error);
       showToast('Failed to update project. Please try again.', 'error');
     }
-  }, [projectService, setProjects, selectedProject, setSelectedProject, showToast]);
+  }, [setProjects, selectedProject, setSelectedProject, showToast]);
 
   const handleCreateProject = async () => {
     if (!newProjectForm.title.trim()) {
@@ -506,76 +490,22 @@ export function ProjectPage({
       const projectData: CreateProjectRequest = {
         title: newProjectForm.title,
         description: newProjectForm.description,
-        color: newProjectForm.color,
-        icon: 'Briefcase', // Default icon
-        // PRD data will be added as a document in the docs array by backend
-        docs: [],
-        features: [],
-        data: []
+        // docs/features/data optional – send minimal fields only
       };
 
       // Call the streaming project creation API
       const response = await projectService.createProjectWithStreaming(projectData);
       
       if (response.progress_id) {
-        // Create a temporary project with progress tracking
-        const tempId = `temp-${response.progress_id}`;
-        const tempProject: Project = {
-          id: tempId,
-          title: newProjectForm.title,
-          description: newProjectForm.description || '',
-          github_repo: undefined,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          docs: [],
-          features: [],
-          data: [],
-          pinned: false,
-          color: newProjectForm.color,
-          icon: 'Briefcase',
-          creationProgress: {
-            progressId: response.progress_id,
-            status: 'starting',
-            percentage: 0,
-            logs: ['🚀 Starting project creation...'],
-            project: undefined
-          }
-        };
-        
-        // Add temporary project to the list
-        setProjects((prev) => [tempProject, ...prev]);
-        
-        // Close modal immediately
+        // Close modal; server will emit project created event via WebSocket
         setIsNewProjectModalOpen(false);
-        setNewProjectForm({ title: '', description: '' });
+        setNewProjectForm({ title: '', description: '', color: 'blue' });
         setIsCreatingProject(false);
-        
-        // Set up Socket.IO connection for real-time progress
+        // Optionally attach to progress stream only for logging
         projectCreationProgressService.streamProgress(
           response.progress_id,
           (data: ProjectCreationProgressData) => {
-            console.log(`🎯 [PROJECT-PAGE] Progress callback triggered for ${response.progress_id}:`, data);
-            console.log(`🎯 [PROJECT-PAGE] Status: ${data.status}, Percentage: ${data.percentage}, Step: ${data.step}`);
-            
-            // Always update the temporary project's progress - this will trigger the card's useEffect
-            setProjects((prev) => {
-              const updated = prev.map(p => 
-                p.id === tempId 
-                  ? { ...p, creationProgress: data }
-                  : p
-              );
-              console.log(`🎯 [PROJECT-PAGE] Updated projects state with progress data`);
-              return updated;
-            });
-            
-            // Handle error state
-            if (data.status === 'error') {
-              console.log(`🎯 [PROJECT-PAGE] Error status detected, will remove project after delay`);
-              // Remove failed project after delay
-              setTimeout(() => {
-                setProjects((prev) => prev.filter(p => p.id !== tempId));
-              }, 5000);
-            }
+            console.log('Project creation progress (server authoritative):', data.status, data.percentage);
           },
           { autoReconnect: true, reconnectDelay: 5000 }
         );
@@ -587,7 +517,7 @@ export function ProjectPage({
         setSelectedProject(newProject);
         setShowProjectDetails(true);
         
-        setNewProjectForm({ title: '', description: '' });
+  setNewProjectForm({ title: '', description: '', color: 'blue' });
         setIsNewProjectModalOpen(false);
         setIsCreatingProject(false);
       }
@@ -612,27 +542,7 @@ export function ProjectPage({
   } = useStaggeredEntrance([1, 2, 3], 0.15);
 
   // Add animation for tab content
-  const tabContentVariants = {
-    hidden: {
-      opacity: 0,
-      y: 20
-    },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: {
-        duration: 0.4,
-        ease: 'easeOut'
-      }
-    },
-    exit: {
-      opacity: 0,
-      y: -20,
-      transition: {
-        duration: 0.2
-      }
-    }
-  };
+  // (Removed unused tabContentVariants)
 
   return (
     <motion.div 
@@ -724,7 +634,7 @@ export function ProjectPage({
                         console.error('Project creation failed:', error);
                         showToast(`Failed to create project: ${error}`, 'error');
                       }}
-                      onRetry={() => handleRetryProjectCreation(project.creationProgress!.progressId)}
+                      onRetry={() => project.creationProgress && handleRetryProjectCreation(project.creationProgress.progressId)}
                     />
                   </motion.div>
                 ) : (
@@ -843,25 +753,14 @@ export function ProjectPage({
                       </button>
                       
                       {/* Copy Project ID Button */}
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigator.clipboard.writeText(project.id);
-                          showToast('Project ID copied to clipboard', 'success');
-                          // Visual feedback
-                          const button = e.currentTarget;
-                          const originalHTML = button.innerHTML;
-                          button.innerHTML = '<svg class="w-3 h-3 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Copied!';
-                          setTimeout(() => {
-                            button.innerHTML = originalHTML;
-                          }, 2000);
-                        }}
-                        className="flex-1 flex items-center justify-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors py-1"
-                        title="Copy Project ID to clipboard"
+                      <CopyToClipboardButton
+                        value={project.id}
+                        onCopy={() => showToast('Project ID copied to clipboard', 'success')}
+                        className="flex-1 justify-center text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 bg-transparent"
+                        ariaLabel="Copy project ID"
                       >
-                        <Clipboard className="w-3 h-3" />
-                        <span>Copy ID</span>
-                      </button>
+                        Copy ID
+                      </CopyToClipboardButton>
                       
                       {/* Delete button */}
                       <button
@@ -947,7 +846,7 @@ export function ProjectPage({
                       onTasksChange={(updatedTasks) => {
                         setTasks(updatedTasks);
                         // Refresh task counts for all projects when tasks change
-                        const projectIds = projects.map(p => p.id).filter(id => !id.startsWith('temp-'));
+                        const projectIds = projects.map(p => p.id);
                         loadTaskCountsForAllProjects(projectIds);
                       }} 
                       projectId={selectedProject.id} 

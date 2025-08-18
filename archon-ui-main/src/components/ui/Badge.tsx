@@ -2,15 +2,20 @@ import React from 'react';
 interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
   children: React.ReactNode;
   color?: 'purple' | 'green' | 'pink' | 'blue' | 'gray' | 'orange';
+  /** Backwards compatibility alias used in older components */
+  accentColor?: 'purple' | 'green' | 'pink' | 'blue' | 'gray' | 'orange';
   variant?: 'solid' | 'outline';
 }
 export const Badge: React.FC<BadgeProps> = ({
   children,
-  color = 'gray',
+  color,
+  accentColor,
   variant = 'outline',
   className = '',
   ...props
 }) => {
+  // Prefer explicit color prop; fall back to legacy accentColor; default to gray
+  const finalColor = color || accentColor || 'gray';
   const colorMap = {
     solid: {
       purple: 'bg-purple-500/10 text-purple-500 dark:bg-purple-500/10 dark:text-purple-500',
@@ -31,7 +36,7 @@ export const Badge: React.FC<BadgeProps> = ({
   };
   return <span className={`
         inline-flex items-center text-xs px-2 py-1 rounded
-        ${colorMap[variant][color]}
+        ${colorMap[variant][finalColor as keyof typeof colorMap['solid']]}
         ${className}
       `} {...props}>
       {children}

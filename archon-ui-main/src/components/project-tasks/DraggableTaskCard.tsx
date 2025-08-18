@@ -1,8 +1,9 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { useDrag, useDrop } from 'react-dnd';
-import { Edit, Trash2, RefreshCw, Tag, User, Bot, Clipboard } from 'lucide-react';
+import { Edit, Trash2, RefreshCw, Tag } from 'lucide-react';
 import { Task } from './TaskTableView';
 import { ItemTypes, getAssigneeIcon, getAssigneeGlow, getOrderColor, getOrderGlow } from '../../lib/task-utils';
+import { CopyToClipboardButton } from '../ui/CopyToClipboardButton';
 
 export interface DraggableTaskCardProps {
   task: Task;
@@ -23,7 +24,7 @@ export const DraggableTaskCard = ({
   onView,
   onDelete,
   onTaskReorder,
-  allTasks = [],
+  allTasks: _allTasks = [],
   hoveredTaskId,
   onTaskHover,
 }: DraggableTaskCardProps) => {
@@ -187,24 +188,13 @@ export const DraggableTaskCard = ({
                 </div>
                 <span className="text-gray-600 dark:text-gray-400 text-xs">{task.assignee?.name || 'User'}</span>
               </div>
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigator.clipboard.writeText(task.id);
-                  // Optional: Add a small toast or visual feedback here
-                  const button = e.currentTarget;
-                  const originalHTML = button.innerHTML;
-                  button.innerHTML = '<span class="text-green-500">Copied!</span>';
-                  setTimeout(() => {
-                    button.innerHTML = originalHTML;
-                  }, 2000);
-                }}
-                className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
-                title="Copy Task ID to clipboard"
+              <CopyToClipboardButton
+                value={task.id}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 bg-transparent"
+                ariaLabel="Copy task ID"
               >
-                <Clipboard className="w-3 h-3" />
-                <span>Task ID</span>
-              </button>
+                Task ID
+              </CopyToClipboardButton>
             </div>
           </div>
         </div>
@@ -240,4 +230,4 @@ export const DraggableTaskCard = ({
       </div>
     </div>
   );
-}; 
+};

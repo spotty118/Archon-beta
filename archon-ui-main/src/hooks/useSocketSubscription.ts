@@ -25,7 +25,7 @@ export function useSocketSubscription<T = any>(
   
   useEffect(() => {
     const messageHandler = (message: WebSocketMessage) => {
-      stableHandler(message.data || message);
+      stableHandler((message.data || message) as T);
     };
     
     socket.addMessageHandler(eventName, messageHandler);

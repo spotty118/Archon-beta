@@ -122,7 +122,7 @@ function formatArrayContent(array: any[]): string {
 /**
  * Formats object content as key-value pairs or nested structure
  */
-function formatObjectContent(obj: Record<string, any>, isNested: boolean = false): string {
+function formatObjectContent(obj: Record<string, any>, _isNested: boolean = false): string {
   const entries = Object.entries(obj);
   
   if (entries.length === 0) {

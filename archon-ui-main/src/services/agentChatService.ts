@@ -13,7 +13,7 @@ import {
 import { serverHealthService } from './serverHealthService';
 import { getWebSocketUrl } from '../config/api';
 
-export interface ChatMessage {
+interface ChatMessage {
   id: string;
   content: string;
   sender: 'user' | 'agent';
@@ -250,24 +250,25 @@ class AgentChatService {
       switch (wsMessage.type) {
         case 'message':
           if (wsMessage.data) {
+            const data = wsMessage.data as any;
             const chatMessage: ChatMessage = {
-              id: wsMessage.data.id || new Date().toISOString(),
-              content: wsMessage.data.content || wsMessage.content || '',
-              sender: wsMessage.data.sender || 'agent',
-              timestamp: wsMessage.data.timestamp ? new Date(wsMessage.data.timestamp) : new Date(),
-              agent_type: wsMessage.data.agent_type,
+              id: data.id || new Date().toISOString(),
+              content: data.content || (wsMessage as any).content || '',
+              sender: data.sender || 'agent',
+              timestamp: data.timestamp ? new Date(data.timestamp) : new Date(),
+              agent_type: data.agent_type,
             };
             onMessage(chatMessage);
           }
           break;
           
         case 'typing':
-          onTyping(wsMessage.is_typing || false);
+          onTyping((wsMessage as any).is_typing || false);
           break;
           
         case 'stream_chunk':
-          if (onStreamChunk && wsMessage.content) {
-            onStreamChunk(wsMessage.content);
+          if (onStreamChunk && (wsMessage as any).content) {
+            onStreamChunk((wsMessage as any).content);
           }
           break;
           

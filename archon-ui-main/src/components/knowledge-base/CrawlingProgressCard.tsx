@@ -22,7 +22,6 @@ import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { CrawlProgressData } from '../../services/crawlProgressService';
 import { useTerminalScroll } from '../../hooks/useTerminalScroll';
-import { knowledgeBaseService } from '../../services/knowledgeBaseService';
 
 interface CrawlingProgressCardProps {
   progressData: CrawlProgressData;
@@ -928,4 +927,4 @@ export const CrawlingProgressCard: React.FC<CrawlingProgressCardProps> = ({
       )}
     </Card>
   );
-}; 
+};

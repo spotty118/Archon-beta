@@ -41,12 +41,12 @@ export const MilkdownEditor: React.FC<MilkdownEditorProps> = ({
     
     if (doc.content && typeof doc.content === 'object') {
       // If content has a markdown field, use it
-      if (doc.content.markdown) {
-        return doc.content.markdown;
+      if ((doc.content as any).markdown) {
+        return (doc.content as any).markdown;
       }
       
       // Check if this is a PRP document
-      if (doc.content.document_type === 'prp' || doc.document_type === 'prp') {
+      if ((doc as any).content?.document_type === 'prp' || (doc as any).document_type === 'prp') {
         return convertPRPToMarkdown(doc.content);
       }
       
@@ -63,10 +63,10 @@ export const MilkdownEditor: React.FC<MilkdownEditorProps> = ({
           });
           markdown += '\n';
         } else if (typeof value === 'object' && value !== null) {
-          if (value.description) {
-            markdown += `${value.description}\n\n`;
+          if ((value as any).description) {
+            markdown += `${(value as any).description}\n\n`;
           } else {
-            Object.entries(value).forEach(([subKey, subValue]) => {
+            Object.entries(value as Record<string, any>).forEach(([subKey, subValue]) => {
               markdown += `**${subKey}:** ${subValue}\n\n`;
             });
           }
@@ -105,7 +105,7 @@ export const MilkdownEditor: React.FC<MilkdownEditorProps> = ({
       }
       
       // Complex array with objects
-      return value.map((item, index) => {
+      return value.map((item) => {
         if (typeof item === 'object' && item !== null) {
           const itemLines = formatValue(item, indent + '  ', depth + 1).split('\n');
           const firstLine = itemLines[0];
@@ -230,8 +230,8 @@ export const MilkdownEditor: React.FC<MilkdownEditorProps> = ({
     ];
     
     // Create ordered list of fields
-    const orderedFields = [];
-    const remainingFields = [];
+    const orderedFields: { key: string; priority: number }[] = [];
+    const remainingFields: string[] = [];
     
     Object.keys(content).forEach(key => {
       if (skipFields.includes(key)) return;
@@ -293,12 +293,12 @@ export const MilkdownEditor: React.FC<MilkdownEditorProps> = ({
       root: editorRef.current,
       defaultValue: initialContent,
       features: {
-        [CrepeFeature.HeaderMeta]: true,
+        [(CrepeFeature as any).HeaderMeta]: true,
         [CrepeFeature.LinkTooltip]: true,
         [CrepeFeature.ImageBlock]: true,
         [CrepeFeature.BlockEdit]: true,
         [CrepeFeature.ListItem]: true,
-        [CrepeFeature.CodeBlock]: true,
+        [(CrepeFeature as any).CodeBlock]: true,
         [CrepeFeature.Table]: true,
         [CrepeFeature.Toolbar]: true,
       },
@@ -434,12 +434,12 @@ export const MilkdownEditor: React.FC<MilkdownEditorProps> = ({
         root: editorRef.current,
         defaultValue: originalContent,
         features: {
-          [CrepeFeature.HeaderMeta]: true,
+          [(CrepeFeature as any).HeaderMeta]: true,
           [CrepeFeature.LinkTooltip]: true,
           [CrepeFeature.ImageBlock]: true,
           [CrepeFeature.BlockEdit]: true,
           [CrepeFeature.ListItem]: true,
-          [CrepeFeature.CodeBlock]: true,
+          [(CrepeFeature as any).CodeBlock]: true,
           [CrepeFeature.Table]: true,
           [CrepeFeature.Toolbar]: true,
         },

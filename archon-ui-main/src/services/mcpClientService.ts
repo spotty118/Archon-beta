@@ -89,8 +89,6 @@ const MCPToolSchema = z.object({
 export type MCPTool = z.infer<typeof MCPToolSchema>;
 export type MCPParameter = z.infer<typeof MCPParameterSchema>;
 
-import { getApiUrl } from '../config/api';
-
 /**
  * MCP Client Service - Universal MCP client that connects to any MCP servers
  * This service communicates with the standalone Python MCP client service
@@ -442,4 +440,4 @@ class MCPClientService {
   }
 }
 
-export const mcpClientService = new MCPClientService(); 
+export const mcpClientService = new MCPClientService();

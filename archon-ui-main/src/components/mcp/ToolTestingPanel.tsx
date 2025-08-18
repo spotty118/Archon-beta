@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { X, Play, ChevronDown, TerminalSquare, Copy, Check, MinusCircle, Maximize2, Minimize2, Hammer, GripHorizontal } from 'lucide-react';
+import { X, Play, ChevronDown, TerminalSquare, Copy, Check, Maximize2, Minimize2, Hammer } from 'lucide-react';
 import { Client, Tool } from './MCPClients';
 import { Button } from '../ui/Button';
 import { mcpClientService } from '../../services/mcpClientService';

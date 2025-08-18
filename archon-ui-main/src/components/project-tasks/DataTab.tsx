@@ -1,9 +1,8 @@
 import React, { useCallback, useState, useEffect, useMemo } from 'react';
 import '@xyflow/react/dist/style.css';
-import { ReactFlow, Node, Edge, Background, Controls, MarkerType, NodeChange, applyNodeChanges, EdgeChange, applyEdgeChanges, ConnectionLineType, addEdge, Connection, Handle, Position } from '@xyflow/react';
+import { ReactFlow, Node, Edge, Controls, MarkerType, NodeChange, applyNodeChanges, EdgeChange, applyEdgeChanges, ConnectionLineType, addEdge, Connection, Handle, Position } from '@xyflow/react';
 import { Database, Info, Calendar, TrendingUp, Edit, Plus, X, Save, Trash2 } from 'lucide-react';
-import { projectService } from '../../services/projectService';
-import { taskUpdateSocketIO } from '../../services/socketIOService';
+import { projectService } from '../../services';
 import { useToast } from '../../contexts/ToastContext';
 
 // Custom node types - will be defined inside the component to access state
@@ -21,27 +20,7 @@ const createTableNode = (id: string, label: string, columns: string[], x: number
   }
 });
 
-// Default fallback nodes for basic database structure
-const defaultNodes: Node[] = [
-  createTableNode('users', 'Users', ['id (PK) - UUID', 'email - VARCHAR(255)', 'password - VARCHAR(255)', 'firstName - VARCHAR(100)', 'lastName - VARCHAR(100)', 'createdAt - TIMESTAMP', 'updatedAt - TIMESTAMP'], 150, 100),
-  createTableNode('projects', 'Projects', ['id (PK) - UUID', 'title - VARCHAR(255)', 'description - TEXT', 'status - VARCHAR(50)', 'userId (FK) - UUID', 'createdAt - TIMESTAMP', 'updatedAt - TIMESTAMP'], 500, 100)
-];
 
-const defaultEdges: Edge[] = [{
-  id: 'projects-users',
-  source: 'users',
-  target: 'projects',
-  sourceHandle: 'Users-id',
-  targetHandle: 'Projects-userId',
-  animated: true,
-  style: {
-    stroke: '#d946ef'
-  },
-  markerEnd: {
-    type: MarkerType.Arrow,
-    color: '#d946ef'
-  }
-}];
 
 // Data metadata card component for the new data structure
 const DataCard = ({ data }: { data: any }) => {
@@ -241,7 +220,7 @@ export const DataTab = ({ project }: DataTabProps) => {
     await saveToDatabase(nodes, newEdges);
   }, [nodes, edges, project?.id]);
 
-  const handleNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
+  const handleNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setEditingNode(node);
     setShowEditModal(true);
   }, []);
@@ -288,8 +267,20 @@ export const DataTab = ({ project }: DataTabProps) => {
     try {
       const updatedData = {
         type: 'erd',
-        nodes: nodesToSave,
-        edges: edgesToSave
+        nodes: nodesToSave.map(n => ({
+          id: n.id,
+          label: String(((n.data as any)?.label) ?? ''),
+          type: n.type,
+          position: n.position,
+          data: n.data
+        })),
+        edges: edgesToSave.map(e => ({
+          id: e.id,
+          source: e.source,
+          target: e.target,
+          label: typeof (e as any).label === 'string' ? (e as any).label : ((e as any).label != null ? String((e as any).label) : undefined),
+          type: (e as any).type
+        }))
       };
 
       console.log('🔄 Calling projectService.updateProject with data:', updatedData);

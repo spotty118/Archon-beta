@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Table, LayoutGrid, Plus, Wifi, WifiOff, List } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Table, LayoutGrid, Plus, Wifi, WifiOff } from 'lucide-react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
-import { Toggle } from '../ui/Toggle';
-import { projectService } from '../../services/projectService';
+import { projectService } from '../../services';
 
 import { useTaskSocket } from '../../hooks/useTaskSocket';
 import type { CreateTaskRequest, UpdateTaskRequest, DatabaseTaskStatus } from '../../types/project';
@@ -11,8 +10,7 @@ import { TaskTableView, Task } from './TaskTableView';
 import { TaskBoardView } from './TaskBoardView';
 import { EditTaskModal } from './EditTaskModal';
 
-// Assignee utilities
-const ASSIGNEE_OPTIONS = ['User', 'Archon', 'AI IDE Agent'] as const;
+// (Assignee options handled elsewhere)
 
 // Mapping functions for status conversion
 const mapUIStatusToDBStatus = (uiStatus: Task['status']): DatabaseTaskStatus => {
@@ -65,8 +63,6 @@ export const TasksTab = ({
   const [tasks, setTasks] = useState<Task[]>([]);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [projectFeatures, setProjectFeatures] = useState<any[]>([]);
-  const [isLoadingFeatures, setIsLoadingFeatures] = useState(false);
   const [isSavingTask, setIsSavingTask] = useState<boolean>(false);
   const [isWebSocketConnected, setIsWebSocketConnected] = useState(false);
   
@@ -75,10 +71,7 @@ export const TasksTab = ({
     setTasks(initialTasks);
   }, [initialTasks]);
 
-  // Load project features on component mount
-  useEffect(() => {
-    loadProjectFeatures();
-  }, [projectId]);
+  // Removed feature loading (handled via project entity elsewhere)
 
   // Optimized socket handlers with conflict resolution
   const handleTaskUpdated = useCallback((message: any) => {
@@ -96,18 +89,12 @@ export const TasksTab = ({
       const existingTask = prev.find(task => task.id === updatedTask.id);
       if (existingTask) {
         // Check if this is a more recent update
-        const serverTimestamp = message.server_timestamp || Date.now();
-        const lastUpdate = existingTask.lastUpdate || 0;
-        
-        if (serverTimestamp <= lastUpdate) {
-          console.log('[Socket] Ignoring stale update for task:', updatedTask.id);
-          return prev;
-        }
+  // Conflict resolution removed (simplified for Supabase real-time)
       }
       
       const updated = prev.map(task => 
         task.id === updatedTask.id 
-          ? { ...mappedTask, lastUpdate: message.server_timestamp || Date.now() }
+          ? { ...mappedTask }
           : task
       );
       
@@ -174,7 +161,7 @@ export const TasksTab = ({
   }, [onTasksChange]);
 
   // Simplified socket connection with better lifecycle management
-  const { isConnected, connectionState } = useTaskSocket({
+  const { isConnected } = useTaskSocket({
     projectId,
     onTaskCreated: handleTaskCreated,
     onTaskUpdated: handleTaskUpdated,
@@ -183,7 +170,8 @@ export const TasksTab = ({
     onTasksReordered: handleTasksReordered,
     onInitialTasks: handleInitialTasks,
     onConnectionStateChange: (state) => {
-      setIsWebSocketConnected(state === 'connected');
+      // Accept CONNECTED state from WebSocketState enum
+      setIsWebSocketConnected(String(state).toUpperCase() === 'CONNECTED');
     }
   });
 
@@ -192,20 +180,7 @@ export const TasksTab = ({
     setIsWebSocketConnected(isConnected);
   }, [isConnected]);
 
-  const loadProjectFeatures = async () => {
-    if (!projectId) return;
-    
-    setIsLoadingFeatures(true);
-    try {
-      const response = await projectService.getProjectFeatures(projectId);
-      setProjectFeatures(response.features || []);
-    } catch (error) {
-      console.error('Failed to load project features:', error);
-      setProjectFeatures([]);
-    } finally {
-      setIsLoadingFeatures(false);
-    }
-  };
+  // Feature loading removed
 
   // Modal management functions
   const openEditModal = async (task: Task) => {
@@ -223,8 +198,6 @@ export const TasksTab = ({
     
     setIsSavingTask(true);
     try {
-      let parentTaskId = task.id;
-      
       if (task.id) {
         // Update existing task
         const updateData: UpdateTaskRequest = {
@@ -251,8 +224,7 @@ export const TasksTab = ({
           ...(task.featureColor && { featureColor: task.featureColor })
         };
         
-        const createdTask = await projectService.createTask(createData);
-        parentTaskId = createdTask.id;
+  await projectService.createTask(createData);
       }
       
       // Don't reload tasks - let socket updates handle synchronization
@@ -266,23 +238,13 @@ export const TasksTab = ({
   };
 
   // Update tasks helper
-  const updateTasks = (newTasks: Task[]) => {
+  const updateTasks = useCallback((newTasks: Task[]) => {
     setTasks(newTasks);
     onTasksChange(newTasks);
-  };
+  }, [onTasksChange]);
 
   // Helper function to reorder tasks by status to ensure no gaps (1,2,3...)
-  const reorderTasksByStatus = async (status: Task['status']) => {
-    const tasksInStatus = tasks
-      .filter(task => task.status === status)
-      .sort((a, b) => a.task_order - b.task_order);
-    
-    const updatePromises = tasksInStatus.map((task, index) => 
-      projectService.updateTask(task.id, { task_order: index + 1 })
-    );
-    
-    await Promise.all(updatePromises);
-  };
+  // reorderTasksByStatus removed (server handles ordering)
 
   // Helper function to get next available order number for a status
   const getNextOrderForStatus = (status: Task['status']): number => {
@@ -312,10 +274,7 @@ export const TasksTab = ({
         console.log('REORDER: Persisting position change for task:', task.title, 'new position:', task.task_order);
         
         // Update only the moved task with server timestamp for conflict resolution
-        await projectService.updateTask(task.id, { 
-          task_order: task.task_order,
-          client_timestamp: Date.now()
-        });
+  await projectService.updateTask(task.id, { task_order: task.task_order });
         console.log('REORDER: Single task position persisted successfully');
         
       } catch (error) {
@@ -324,7 +283,7 @@ export const TasksTab = ({
         console.log('REORDER: Socket will handle state recovery');
       }
     }, 800), // Slightly reduced delay for better responsiveness
-    [projectId]
+  []
   );
 
   // Optimized task reordering without optimistic update conflicts
@@ -401,8 +360,7 @@ export const TasksTab = ({
     // Create updated task with new position and timestamp
     const updatedTask = {
       ...movingTask,
-      task_order: newPosition,
-      lastUpdate: Date.now() // Add timestamp for conflict resolution
+  task_order: newPosition
     };
     
     // Immediate UI update without optimistic tracking interference
@@ -433,8 +391,7 @@ export const TasksTab = ({
       // Update the task with new status and order
       await projectService.updateTask(taskId, {
         status: mapUIStatusToDBStatus(newStatus),
-        task_order: newOrder,
-        client_timestamp: Date.now()
+        task_order: newOrder
       });
       console.log(`[TasksTab] Successfully updated task ${taskId} status in backend.`);
       
@@ -498,9 +455,7 @@ export const TasksTab = ({
   const updateTaskInline = async (taskId: string, updates: Partial<Task>) => {
     console.log(`[TasksTab] Inline update for task ${taskId} with updates:`, updates);
     try {
-      const updateData: Partial<UpdateTaskRequest> = {
-        client_timestamp: Date.now()
-      };
+  const updateData: Partial<UpdateTaskRequest> = {};
       
       if (updates.title !== undefined) updateData.title = updates.title;
       if (updates.description !== undefined) updateData.description = updates.description;
@@ -568,10 +523,7 @@ export const TasksTab = ({
   };
 
   // Memoized version of getTasksForPrioritySelection to prevent recalculation on every render
-  const memoizedGetTasksForPrioritySelection = useMemo(
-    () => getTasksForPrioritySelection,
-    [tasks, editingTask?.id]
-  );
+  const memoizedGetTasksForPrioritySelection = getTasksForPrioritySelection;
 
   return (
     <DndProvider backend={HTML5Backend}>
@@ -667,8 +619,6 @@ export const TasksTab = ({
         <EditTaskModal
           isModalOpen={isModalOpen}
           editingTask={editingTask}
-          projectFeatures={projectFeatures}
-          isLoadingFeatures={isLoadingFeatures}
           isSavingTask={isSavingTask}
           onClose={closeModal}
           onSave={saveTask}

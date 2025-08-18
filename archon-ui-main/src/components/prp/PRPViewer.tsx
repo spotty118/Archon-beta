@@ -59,7 +59,7 @@ export const PRPViewer: React.FC<PRPViewerProps> = ({
     hasMetadata: typeof content === 'object' && content !== null ? isDocumentWithMetadata(content) : false,
     isMarkdown: typeof content === 'string' ? isMarkdownContent(content) : false,
     keys: typeof content === 'object' && content !== null ? Object.keys(content) : [],
-    contentPreview: typeof content === 'string' ? content.substring(0, 200) + '...' : 'Not a string'
+    contentPreview: typeof content === 'string' ? (content as string).substring(0, 200) + '...' : 'Not a string'
   });
 
   // Route to appropriate renderer based on content type

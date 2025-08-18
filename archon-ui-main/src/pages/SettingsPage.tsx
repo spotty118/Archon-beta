@@ -188,8 +188,6 @@ export const SettingsPage = () => {
             <CollapsibleSettingsCard
               title="Bug Reporting"
               icon={Bug}
-              iconColor="text-red-500"
-              borderColor="border-red-200 dark:border-red-800"
               defaultExpanded={false}
             >
               <div className="space-y-4">

@@ -99,7 +99,7 @@ export const PlanSection: React.FC<SectionProps> = ({
   const isPhased = Object.values(data).some(value => 
     typeof value === 'object' && 
     value !== null && 
-    (value.duration || value.deliverables || value.tasks)
+    ((value as any).duration || (value as any).deliverables || (value as any).tasks)
   );
   
   if (isPhased) {

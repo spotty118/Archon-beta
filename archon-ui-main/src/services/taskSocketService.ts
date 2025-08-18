@@ -101,7 +101,7 @@ class TaskSocketService {
 
     this.socketService.addMessageHandler('initial_tasks', (message) => {
       console.log('[TASK SOCKET] Initial tasks received:', message.data);
-      this.notifyAllHandlers('onInitialTasks', message.data);
+      this.notifyAllHandlers('onInitialTasks', (message.data as any[]));
     });
 
     this.socketService.addMessageHandler('joined_project', (message) => {

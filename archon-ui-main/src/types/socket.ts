@@ -142,8 +142,6 @@ export interface SocketEventHandlers {
   disconnect: (reason: string) => void;
   connect_error: (error: Error) => void;
   
-  // Generic event handler for any untyped events
-  [eventName: string]: (...args: unknown[]) => void;
 }
 
 // WebSocket connection state
@@ -156,16 +154,6 @@ export interface WebSocketState {
   latency?: number;
 }
 
-// Mock WebSocket interface for testing
-export interface MockWebSocket {
-  send: (data: unknown) => boolean;
-  close: () => void;
-  readyState: number;
-  onopen?: (event: Event) => void;
-  onmessage?: (event: MessageEvent) => void;
-  onclose?: (event: CloseEvent) => void;
-  onerror?: (event: Event) => void;
-}
 
 // Acknowledgment callback type
 export type AckCallback = (response?: unknown) => void;

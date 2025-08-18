@@ -38,7 +38,8 @@ export function parseMarkdownToPRP(content: string): ParsedMarkdown {
 
   const lines = content.split('\n');
   const sections: Record<string, ParsedSection> = {};
-  let currentSection: ParsedSection | null = null;
+  // Build section incrementally without sectionKey then assign when pushing
+  let currentSection: (Omit<ParsedSection, 'sectionKey'>) | null = null;
   let documentTitle: string | undefined;
   let sectionCounter = 0;
 
@@ -57,10 +58,11 @@ export function parseMarkdownToPRP(content: string): ParsedMarkdown {
         const sectionKey = generateSectionKey(currentSection.title, sectionCounter);
         sections[sectionKey] = {
           ...currentSection,
+          sectionKey,
           content: currentSection.content.trim(),
           rawContent: currentSection.rawContent.trim(),
           type: detectContentType(currentSection.content)
-        };
+        } as ParsedSection;
         sectionCounter++;
       }
       
@@ -94,10 +96,11 @@ export function parseMarkdownToPRP(content: string): ParsedMarkdown {
     const sectionKey = generateSectionKey(currentSection.title, sectionCounter);
     sections[sectionKey] = {
       ...currentSection,
+      sectionKey,
       content: currentSection.content.trim(),
       rawContent: currentSection.rawContent.trim(),
       type: detectContentType(currentSection.content)
-    };
+    } as ParsedSection;
   }
 
   return {
@@ -183,7 +186,7 @@ export function isMarkdownContent(content: any): boolean {
     /^[-*+]\s+.+$/m,      // Bullet lists
     /^\d+\.\s+.+$/m,      // Numbered lists
     /```/,                // Code blocks
-    /^\>.+$/m,            // Blockquotes
+  /^>. +$/m,            // Blockquotes
     /\*\*.+\*\*/,         // Bold text
     /\*.+\*/,             // Italic text
   ];

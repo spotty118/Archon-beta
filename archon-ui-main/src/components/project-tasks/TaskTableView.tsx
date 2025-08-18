@@ -1,10 +1,10 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useDrag, useDrop } from 'react-dnd';
-import { Check, Trash2, Edit, Tag, User, Bot, Clipboard, Save, Plus } from 'lucide-react';
+import { Check, Trash2, Edit, Clipboard } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { DeleteConfirmModal } from '../../pages/ProjectPage';
-import { projectService } from '../../services/projectService';
-import { ItemTypes, getAssigneeIcon, getAssigneeGlow, getOrderColor, getOrderGlow } from '../../lib/task-utils';
+import { projectService } from '../../services';
+import { ItemTypes, getAssigneeIcon, getAssigneeGlow, getOrderGlow } from '../../lib/task-utils';
 import { DraggableTaskCard } from './DraggableTaskCard';
 
 export interface Task {
@@ -62,17 +62,6 @@ const getOrderTextColor = (order: number) => {
 
 
 // Helper function to reorder tasks properly
-const reorderTasks = (tasks: Task[], fromIndex: number, toIndex: number): Task[] => {
-  const result = [...tasks];
-  const [movedTask] = result.splice(fromIndex, 1);
-  result.splice(toIndex, 0, movedTask);
-  
-  // Update task_order to be sequential (1, 2, 3, ...)
-  return result.map((task, index) => ({
-    ...task,
-    task_order: index + 1
-  }));
-};
 
 // Inline editable cell component
 interface EditableCellProps {
@@ -203,7 +192,6 @@ const DraggableTaskRow = ({
   onTaskDelete, 
   onTaskReorder,
   onTaskUpdate,
-  tasksInStatus,
   style
 }: DraggableTaskRowProps) => {
   const [editingField, setEditingField] = useState<string | null>(null);
@@ -877,4 +865,4 @@ export const TaskTableView = ({
       )}
     </div>
   );
-}; 
+};

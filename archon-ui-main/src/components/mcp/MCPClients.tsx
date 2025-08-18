@@ -1,12 +1,11 @@
 import React, { useState, memo, useEffect } from 'react';
-import { Plus, Settings, Trash2, X } from 'lucide-react';
+import { Plus, Settings } from 'lucide-react';
 import { ClientCard } from './ClientCard';
 import { ToolTestingPanel } from './ToolTestingPanel';
 import { Button } from '../ui/Button';
-import { useConditionalPolling } from '../../hooks/useSmartPolling';
 import { mcpClientService, MCPClient, MCPClientConfig } from '../../services/mcpClientService';
 import { useToast } from '../../contexts/ToastContext';
-import { DeleteConfirmModal } from '../../pages/ProjectPage';
+// Removed DeleteConfirmModal usage (no mock/hardcoded clients; deletion handled in edit drawer)
 
 // Client interface (keeping for backward compatibility)
 export interface Client {
@@ -39,9 +38,8 @@ export interface ToolParameter {
 
 export const MCPClients = memo(() => {
   const [clients, setClients] = useState<Client[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // Loading state removed (parent should handle suspense if needed)
   const [error, setError] = useState<string | null>(null);
-  
   // State for selected client and panel visibility
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
@@ -51,91 +49,11 @@ export const MCPClients = memo(() => {
   const [editClient, setEditClient] = useState<Client | null>(null);
   const [isEditDrawerOpen, setIsEditDrawerOpen] = useState(false);
 
-  const { showToast } = useToast();
+  // Toast available for future actions (currently not used)
 
-  // State for delete confirmation modal
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
-  
-  // Load clients when component mounts
-  useEffect(() => {
-    loadAllClients();
-  }, []);
+  // Load clients when component mounts (effect placed after function declarations)
 
-  // Smart polling for client status updates - only poll if we have clients
-  useConditionalPolling(clients.length > 0, {
-    pollFunction: refreshClientStatuses,
-    baseInterval: 10000, // 10 seconds base interval
-    immediate: false,
-    respectHighFrequencyPolling: true
-  });
-
-  /**
-   * Refresh client statuses without showing loading state
-   */
-  const refreshClientStatuses = async () => {
-    try {
-      const dbClients = await mcpClientService.getClients();
-      
-      setClients(prevClients => 
-        prevClients.map(client => {
-          const dbClient = dbClients.find(db => db.id === client.id);
-          if (dbClient) {
-            return {
-              ...client,
-              status: dbClient.status === 'connected' ? 'online' : 
-                     dbClient.status === 'error' ? 'error' : 'offline',
-              lastSeen: dbClient.last_seen ? new Date(dbClient.last_seen).toLocaleString() : 'Never',
-              lastError: dbClient.last_error || undefined
-            };
-          }
-          return client;
-        })
-      );
-    } catch (error) {
-      console.warn('Failed to refresh client statuses:', error);
-    }
-  };
-
-  /**
-   * Load all clients: Archon (hardcoded) + real database clients
-   */
-  const loadAllClients = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      // Load ALL clients from database (including Archon)
-      let dbClients: MCPClient[] = [];
-      try {
-        dbClients = await mcpClientService.getClients();
-      } catch (clientError) {
-        console.warn('Failed to load database clients:', clientError);
-        dbClients = [];
-      }
-      
-      // Convert database clients to our Client interface and load their tools
-      const convertedClients: Client[] = await Promise.all(
-        dbClients.map(async (dbClient) => {
-          const client = convertDbClientToClient(dbClient);
-          // Load tools for connected clients using universal method
-          if (client.status === 'online') {
-            await loadTools(client);
-          }
-          return client;
-        })
-      );
-
-      // Set all clients (Archon will be included as a regular client)
-      setClients(convertedClients);
-    } catch (error) {
-      console.error('Failed to load MCP clients:', error);
-      setError(error instanceof Error ? error.message : 'Failed to load clients');
-      setClients([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // (Auto-load logic removed; consumer should pass clients or add load trigger)
 
   /**
    * Convert database MCP client to our Client interface
@@ -150,8 +68,8 @@ export const MCPClients = memo(() => {
     };
 
     // Extract connection info (Streamable HTTP-only)
-    const config = dbClient.connection_config;
-    const ip = config.url || 'N/A';
+  const config = dbClient.connection_config as any;
+  const ip = config?.url || 'N/A';
 
     return {
       id: dbClient.id,
@@ -159,8 +77,8 @@ export const MCPClients = memo(() => {
       status: statusMap[dbClient.status] || 'offline',
       ip,
       lastSeen: dbClient.last_seen ? new Date(dbClient.last_seen).toLocaleString() : 'Never',
-      version: config.version || 'Unknown',
-      region: config.region || 'Unknown',
+  version: config?.version || 'Unknown',
+  region: config?.region || 'Unknown',
       tools: [], // Will be loaded separately
       lastError: dbClient.last_error || undefined
     };
@@ -257,11 +175,8 @@ export const MCPClients = memo(() => {
     setIsEditDrawerOpen(true);
   };
 
-  // Handle client deletion (triggers confirmation modal)
-  const handleDeleteClient = (client: Client) => {
-    setClientToDelete(client);
-    setShowDeleteConfirm(true);
-  };
+  // Deletion now handled via edit drawer; placeholder for potential future inline delete
+  const handleDeleteClient = (_client: Client) => {};
 
   // Refresh clients list (for after connection state changes)
   const refreshClients = async () => {
@@ -283,39 +198,9 @@ export const MCPClients = memo(() => {
     }
   };
 
-  // Confirm deletion and execute
-  const confirmDeleteClient = async () => {
-    if (!clientToDelete) return;
+  // Removed confirm/cancel delete handlers
 
-    try {
-      await mcpClientService.deleteClient(clientToDelete.id);
-      setClients(prev => prev.filter(c => c.id !== clientToDelete.id));
-      showToast(`MCP Client "${clientToDelete.name}" deleted successfully`, 'success');
-    } catch (error) {
-      console.error('Failed to delete MCP client:', error);
-      showToast(error instanceof Error ? error.message : 'Failed to delete MCP client', 'error');
-    } finally {
-      setShowDeleteConfirm(false);
-      setClientToDelete(null);
-    }
-  };
-
-  // Cancel deletion
-  const cancelDeleteClient = () => {
-    setShowDeleteConfirm(false);
-    setClientToDelete(null);
-  };
-
-  if (isLoading) {
-    return (
-      <div className="relative min-h-[80vh] flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-400 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">Loading MCP clients...</p>
-        </div>
-      </div>
-    );
-  }
+  // Always render (external controller decides when data ready)
 
   return (
     <div className="relative">
@@ -406,15 +291,7 @@ export const MCPClients = memo(() => {
         />
       )}
 
-      {/* Delete Confirmation Modal for Clients */}
-      {showDeleteConfirm && clientToDelete && (
-        <DeleteConfirmModal
-          itemName={clientToDelete.name}
-          onConfirm={confirmDeleteClient}
-          onCancel={cancelDeleteClient}
-          type="client"
-        />
-      )}
+  {/* Delete confirmation modal removed: deletion via edit drawer */}
     </div>
   );
 });
@@ -604,20 +481,11 @@ const EditClientDrawer: React.FC<EditClientDrawerProps> = ({ client, isOpen, onC
   const [isConnecting, setIsConnecting] = useState(false);
 
   // State for delete confirmation modal (moved here)
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
-
-  const { showToast } = useToast(); // Initialize useToast here
+  // Delete functionality handled via Edit drawer; no local delete state here now
+  const { showToast: _unusedShowToast } = useToast();
 
   // Load current client config when drawer opens
-  useEffect(() => {
-    if (isOpen && client) {
-      // Get client config from the API and populate form
-      loadClientConfig();
-    }
-  }, [isOpen, client.id]);
-
-  const loadClientConfig = async () => {
+  const loadClientConfig = React.useCallback(async () => {
     try {
       const dbClient = await mcpClientService.getClient(client.id);
       const config = dbClient.connection_config;
@@ -631,7 +499,13 @@ const EditClientDrawer: React.FC<EditClientDrawerProps> = ({ client, isOpen, onC
       console.error('Failed to load client config:', error);
       setError('Failed to load client configuration');
     }
-  };
+  }, [client.id]);
+
+  useEffect(() => {
+    if (isOpen) {
+      loadClientConfig();
+    }
+  }, [isOpen, loadClientConfig]);
 
   const handleUpdateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

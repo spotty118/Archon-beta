@@ -140,7 +140,7 @@ function isPersonaStructure(value: any): boolean {
   
   // Check if first value has persona-like properties
   const firstValue = values[0];
-  if (typeof firstValue !== 'object') return false;
+  if (typeof firstValue !== 'object' || firstValue === null) return false;
   
   const personaKeys = ['name', 'role', 'goals', 'pain_points', 'journey', 'workflow'];
   return personaKeys.some(key => key in firstValue);

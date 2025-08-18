@@ -17,7 +17,7 @@ import {
   addEdge,
 } from '@xyflow/react'
 import { Layout, Component as ComponentIcon, X, Trash2, Edit, Save } from 'lucide-react'
-import { projectService } from '../../services/projectService'
+import { projectService } from '../../services'
 import { useToast } from '../../contexts/ToastContext'
 
 // Define custom node types following React Flow v12 pattern
@@ -34,7 +34,6 @@ type ServiceNodeData = {
 };
 
 // Define union type for all custom nodes
-type CustomNodeTypes = Node<PageNodeData, 'page'> | Node<ServiceNodeData, 'service'>;
 
 // Custom node components
 const PageNode = ({ data }: NodeProps) => {
@@ -91,59 +90,8 @@ const ServiceNode = ({ data }: NodeProps) => {
   );
 };
 
-const nodeTypes = {
-  page: PageNode,
-  service: ServiceNode,
-}
 
-// Default/fallback nodes for when project has no features data
-const defaultNodes: Node[] = [
-  {
-    id: 'start',
-    type: 'page',
-    data: {
-      label: 'Start App',
-      type: 'Entry Point',
-      route: '/',
-      components: 3,
-    },
-    position: {
-      x: 400,
-      y: 0,
-    },
-  },
-  {
-    id: 'home',
-    type: 'page',
-    data: {
-      label: 'Homepage',
-      type: 'Main View',
-      route: '/home',
-      components: 6,
-    },
-    position: {
-      x: 400,
-      y: 150,
-    },
-  },
-];
 
-// Default/fallback edges
-const defaultEdges: Edge[] = [
-  {
-    id: 'start-home',
-    source: 'start',
-    target: 'home',
-    animated: true,
-    style: {
-      stroke: '#22d3ee',
-    },
-    markerEnd: {
-      type: MarkerType.ArrowClosed,
-      color: '#22d3ee',
-    },
-  },
-];
 
 interface FeaturesTabProps {
   project?: {
@@ -279,7 +227,7 @@ export const FeaturesTab = ({ project }: FeaturesTabProps) => {
     [nodes],
   )
 
-  const saveToDatabase = async (nodesToSave = nodes, edgesToSave = edges) => {
+  const saveToDatabase = async (nodesToSave = nodes, _edgesToSave = edges) => {
     if (!project?.id) {
       console.error('❌ No project ID available for saving features');
       return;
@@ -289,7 +237,11 @@ export const FeaturesTab = ({ project }: FeaturesTabProps) => {
     try {
       console.log('💾 Saving features to database...');
       await projectService.updateProject(project.id, {
-        features: nodesToSave
+        features: nodesToSave.map(n => ({
+          id: n.id,
+          name: String(n.data.label),
+          ...n.data
+        }))
       });
       console.log('✅ Features saved successfully');
       setHasUnsavedChanges(false);
@@ -410,7 +362,7 @@ export const FeaturesTab = ({ project }: FeaturesTabProps) => {
     setNodeToDelete(null);
   }, []);
 
-  const handleNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
+  const handleNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setEditingNode(node);
     setShowEditModal(true);
   }, []);

@@ -286,7 +286,7 @@ export const FeaturesSection = () => {
               <Toggle
                 checked={enableHighFidelityAnimations}
                 onCheckedChange={handleAnimationsToggle}
-                accentColor="cyan"
+                accentColor="blue"
                 icon={<Sparkles className="w-5 h-5" />}
               />
             </div>
@@ -361,7 +361,7 @@ export const FeaturesSection = () => {
               <Toggle
                 checked={enableHighFrequencyPolling}
                 onCheckedChange={handleHighFrequencyPollingToggle}
-                accentColor="yellow"
+                accentColor="orange"
                 icon={<Zap className="w-5 h-5" />}
               />
             </div>

@@ -66,9 +66,9 @@ class ProjectCreationProgressService {
     // Set up message handlers
     this.wsService.addMessageHandler('project_progress', (message) => {
       console.log(`📨 [PROGRESS] Received project_progress event:`, message);
-      if (message.data) {
-        console.log(`📨 [PROGRESS] Calling onMessage with data:`, message.data);
-        onMessage(message.data);
+      if ((message as any).data) {
+        console.log(`📨 [PROGRESS] Calling onMessage with data:`, (message as any).data);
+        onMessage((message as any).data);
       } else {
         console.warn(`📨 [PROGRESS] project_progress event had no data:`, message);
       }
@@ -76,9 +76,9 @@ class ProjectCreationProgressService {
 
     this.wsService.addMessageHandler('project_completed', (message) => {
       console.log(`✅ [PROGRESS] Received project_completed event:`, message);
-      if (message.data) {
-        console.log(`✅ [PROGRESS] Calling onMessage with completion data:`, message.data);
-        onMessage(message.data);
+      if ((message as any).data) {
+        console.log(`✅ [PROGRESS] Calling onMessage with completion data:`, (message as any).data);
+        onMessage((message as any).data);
       } else {
         console.warn(`✅ [PROGRESS] project_completed event had no data:`, message);
       }
@@ -86,9 +86,9 @@ class ProjectCreationProgressService {
 
     this.wsService.addMessageHandler('project_error', (message) => {
       console.log(`❌ [PROGRESS] Received project_error event:`, message);
-      if (message.data) {
-        console.log(`❌ [PROGRESS] Calling onMessage with error data:`, message.data);
-        onMessage(message.data);
+      if ((message as any).data) {
+        console.log(`❌ [PROGRESS] Calling onMessage with error data:`, (message as any).data);
+        onMessage((message as any).data);
       } else {
         console.warn(`❌ [PROGRESS] project_error event had no data:`, message);
       }
@@ -167,4 +167,4 @@ class ProjectCreationProgressService {
 }
 
 // Export singleton instance
-export const projectCreationProgressService = new ProjectCreationProgressService(); 
+export const projectCreationProgressService = new ProjectCreationProgressService();

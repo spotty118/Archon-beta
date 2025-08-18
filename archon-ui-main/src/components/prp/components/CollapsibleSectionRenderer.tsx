@@ -17,6 +17,8 @@ interface CollapsibleSectionRendererProps extends SectionProps {
   animationDuration?: number;
   showPreview?: boolean;
   previewLines?: number;
+  // Accept legacy dark mode prop (currently unused)
+  isDarkMode?: boolean;
 }
 
 /**
@@ -35,7 +37,7 @@ export const CollapsibleSectionRenderer: React.FC<CollapsibleSectionRendererProp
   icon,
   accentColor = 'gray',
   defaultOpen = true,
-  isDarkMode = false,
+  isDarkMode: _isDarkMode = false, // rename to underscore to avoid unused var lint
   isCollapsible = true,
   isOpen: controlledIsOpen,
   onToggle,
@@ -69,7 +71,7 @@ export const CollapsibleSectionRenderer: React.FC<CollapsibleSectionRendererProp
       const height = contentRef.current.scrollHeight;
       setContentHeight(isOpen ? height : 0);
     }
-  }, [isOpen, data, children]);
+  }, [isOpen, data, children, isCollapsible]);
 
   const handleToggle = () => {
     if (!isCollapsible) return;
@@ -169,7 +171,8 @@ export const CollapsibleSectionRenderer: React.FC<CollapsibleSectionRendererProp
       }
       
       // Check for markdown patterns
-      if (/^#{1,6}\s+.+$|^[-*+]\s+.+$|^\d+\.\s+.+$|```|^\>.+$|\*\*.+\*\*|\*.+\*|`[^`]+`/m.test(data)) {
+  // Markdown pattern detection (removed unnecessary escape before >)
+  if (/^#{1,6}\s+.+$|^[-*+]\s+.+$|^\d+\.\s+.+$|```|^>.+$|\*\*.+\*\*|\*.+\*|`[^`]+`/m.test(data)) {
         return 'markdown';
       }
     }

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { BookOpen, HardDrive, Settings } from 'lucide-react';
+import { BookOpen, Settings } from 'lucide-react';
 import { useSettings } from '../../contexts/SettingsContext';
 /**
  * Interface for navigation items

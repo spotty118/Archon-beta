@@ -19,6 +19,7 @@ export interface KnowledgeItemMetadata {
   next_update?: string
   group_name?: string
   original_url?: string
+  code_examples_count?: number
 }
 
 export interface KnowledgeItem {

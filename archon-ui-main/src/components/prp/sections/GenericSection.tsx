@@ -1,7 +1,7 @@
 import React from 'react';
 import { FileText, Hash, List, Box, Type, ToggleLeft } from 'lucide-react';
 import { SectionProps } from '../types/prp.types';
-import { formatKey, formatValue } from '../utils/formatters';
+import { formatValue } from '../utils/formatters';
 import { hasComplexNesting } from '../utils/normalizer';
 import { CollapsibleSectionWrapper } from '../components/CollapsibleSectionWrapper';
 import { SimpleMarkdown } from '../components/SimpleMarkdown';
@@ -16,7 +16,7 @@ export const GenericSection: React.FC<SectionProps> = ({
   icon = <FileText className="w-5 h-5" />,
   accentColor = 'gray',
   defaultOpen = true,
-  isDarkMode = false,
+  isDarkMode: _isDarkMode = false,
   isCollapsible = true,
   isOpen,
   onToggle
@@ -42,7 +42,7 @@ export const GenericSection: React.FC<SectionProps> = ({
     // Handle primitives
     if (typeof value === 'string') {
       // Check if the string looks like markdown content
-      const hasMarkdownIndicators = /^#{1,6}\s+.+$|^[-*+]\s+.+$|^\d+\.\s+.+$|```|^\>.+$|\*\*.+\*\*|\*.+\*|`[^`]+`/m.test(value);
+  const hasMarkdownIndicators = /^#{1,6}\s+.+$|^[-*+]\s+.+$|^\d+\.\s+.+$|```|^>.+$|\*\*.+\*\*|\*.+\*|`[^`]+`/m.test(value);
       
       if (hasMarkdownIndicators && value.length > 20) {
         // Render as markdown for content with markdown syntax

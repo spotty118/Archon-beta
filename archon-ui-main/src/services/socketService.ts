@@ -10,7 +10,6 @@
  * - Document versioning and change tracking
  */
 
-import { Socket } from 'socket.io-client';
 import { WebSocketService, WebSocketState } from './socketIOService';
 
 // Document change types
@@ -163,32 +162,50 @@ export class DocumentSyncService {
   private setupWebSocketHandlers(): void {
     // Handle document update events
     this.webSocketService.addMessageHandler('document_updated', (message) => {
-      this.handleRemoteDocumentUpdate(message.data);
+      const data = message.data as Partial<DocumentSyncEvent>;
+      if (data && typeof data === 'object' && typeof data.documentId === 'string' && typeof data.userId === 'string') {
+        this.handleRemoteDocumentUpdate(data as DocumentSyncEvent);
+      }
     });
 
     // Handle document deletion events
     this.webSocketService.addMessageHandler('document_deleted', (message) => {
-      this.handleRemoteDocumentDelete(message.data);
+      const data = message.data as Partial<DocumentSyncEvent>;
+      if (data && typeof data === 'object' && typeof data.documentId === 'string') {
+        this.handleRemoteDocumentDelete(data as DocumentSyncEvent);
+      }
     });
 
     // Handle document lock events
     this.webSocketService.addMessageHandler('document_locked', (message) => {
-      this.handleDocumentLocked(message.data);
+      const data = message.data as Partial<DocumentSyncEvent>;
+      if (data && typeof data === 'object' && typeof data.documentId === 'string') {
+        this.handleDocumentLocked(data as DocumentSyncEvent);
+      }
     });
 
     // Handle document unlock events
     this.webSocketService.addMessageHandler('document_unlocked', (message) => {
-      this.handleDocumentUnlocked(message.data);
+      const data = message.data as Partial<DocumentSyncEvent>;
+      if (data && typeof data === 'object' && typeof data.documentId === 'string') {
+        this.handleDocumentUnlocked(data as DocumentSyncEvent);
+      }
     });
 
     // Handle conflict detection
     this.webSocketService.addMessageHandler('conflict_detected', (message) => {
-      this.handleConflictDetected(message.data);
+      const data = message.data as any;
+      if (data && typeof data === 'object' && typeof data.documentId === 'string') {
+        this.handleConflictDetected(data);
+      }
     });
 
     // Handle initial document states
     this.webSocketService.addMessageHandler('document_states', (message) => {
-      this.handleDocumentStates(message.data);
+      const data = message.data as any;
+      if (Array.isArray(data)) {
+        this.handleDocumentStates(data as DocumentState[]);
+      }
     });
 
     // Handle connection state changes
@@ -650,7 +667,11 @@ export class DocumentSyncService {
    * Utility methods
    */
   private generateChangeId(): string {
-    return `change_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+      return `change_${crypto.randomUUID()}`;
+    }
+    // Fallback for older environments
+    return `change_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
   }
 
   private getNextVersion(documentId: string): number {
@@ -659,8 +680,16 @@ export class DocumentSyncService {
   }
 
   private getCurrentUserId(): string {
-    // TODO: Get from auth context
-    return 'current_user_id';
+    // Attempt to read an auth user id exposed on window (lightweight bridge to React AuthContext)
+    // This avoids directly importing React into the service layer.
+    // window.__ARCHON_AUTH__ can be set by AuthProvider effect.
+    try {
+      const authState = (typeof window !== 'undefined') ? (window as any).__ARCHON_AUTH__ : undefined;
+      if (authState?.user?.id) return authState.user.id as string;
+    } catch {
+      /* silent */
+    }
+    return 'anonymous';
   }
 
   private createChangeFromState(state: DocumentState): DocumentChange {
@@ -804,7 +833,7 @@ export class DocumentSyncService {
     this.batchQueue.clear();
     this.pendingChanges.clear();
     this.eventHandlers.clear();
-    this.conflictQueue = [];
+  // conflictQueue removed (was reserved for future use); nothing to reset now
   }
 }
 

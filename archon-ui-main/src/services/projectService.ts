@@ -184,7 +184,8 @@ export const projectService = {
         const processed = {
           ...project,
           // Ensure pinned is properly handled as boolean
-          pinned: project.pinned === true || project.pinned === 'true',
+          // Normalize pinned which may come as boolean or string
+          pinned: project.pinned === true || project.pinned === 'true' as unknown as boolean,
           progress: project.progress || 0,
           updated: project.updated || this.formatRelativeTime(project.updated_at)
         };
@@ -713,10 +714,16 @@ export const projectService = {
    * Broadcast project update event
    */
   broadcastProjectUpdate(type: 'PROJECT_CREATED' | 'PROJECT_UPDATED' | 'PROJECT_DELETED', projectId: string, data: any): void {
+    // Bridge to AuthContext via global to avoid React import cycles
+    let authUserId = 'anonymous';
+  try {
+      const authState = (typeof window !== 'undefined') ? (window as any).__ARCHON_AUTH__ : undefined;
+      if (authState?.user?.id) authUserId = authState.user.id;
+    } catch { /* noop */ }
     const event: ProjectManagementEvent = {
       type,
       projectId,
-      userId: 'current-user', // TODO: Get from auth context
+      userId: authUserId,
       timestamp: new Date().toISOString(),
       data
     };
@@ -731,11 +738,16 @@ export const projectService = {
    * Broadcast task update event
    */
   broadcastTaskUpdate(type: 'TASK_CREATED' | 'TASK_UPDATED' | 'TASK_MOVED' | 'TASK_DELETED' | 'TASK_ARCHIVED', taskId: string, projectId: string, data: any): void {
+    let authUserId = 'anonymous';
+  try {
+      const authState = (typeof window !== 'undefined') ? (window as any).__ARCHON_AUTH__ : undefined;
+      if (authState?.user?.id) authUserId = authState.user.id;
+    } catch { /* noop */ }
     const event: ProjectManagementEvent = {
       type,
       taskId,
       projectId,
-      userId: 'current-user', // TODO: Get from auth context
+      userId: authUserId,
       timestamp: new Date().toISOString(),
       data
     };

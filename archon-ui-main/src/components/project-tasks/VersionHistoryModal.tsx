@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { X, Clock, RotateCcw, Eye, Calendar, User, FileText, Diff, GitBranch, Layers, Plus, Minus, AlertTriangle } from 'lucide-react';
-import projectService from '../../services/projectService';
+import { projectService } from '../../services';
 import { Button } from '../ui/Button';
 import { useToast } from '../../contexts/ToastContext';
 
@@ -115,14 +115,7 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
 
   const { showToast } = useToast();
 
-  useEffect(() => {
-    if (isOpen && projectId) {
-      loadVersionHistory();
-      loadCurrentContent();
-    }
-  }, [isOpen, projectId, fieldName, documentId]);
-
-  const loadVersionHistory = async () => {
+  const loadVersionHistory = useCallback(async () => {
     setLoading(true);
     setError(null);
     
@@ -153,9 +146,9 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [projectId, fieldName, documentId, showToast]);
 
-  const loadCurrentContent = async () => {
+  const loadCurrentContent = useCallback(async () => {
     try {
       const currentProject = await projectService.getProject(projectId);
       setCurrentContent((currentProject as any)[fieldName] || []);
@@ -163,7 +156,14 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
       console.error('Error loading current content:', error);
       showToast('Failed to load current content', 'error');
     }
-  };
+  }, [projectId, fieldName, showToast]);
+
+  useEffect(() => {
+    if (isOpen && projectId) {
+      loadVersionHistory();
+      loadCurrentContent();
+    }
+  }, [isOpen, projectId, fieldName, documentId, loadVersionHistory, loadCurrentContent]);
 
   const handlePreview = async (versionNumber: number) => {
     try {
@@ -416,46 +416,7 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
       </div>
     );
     
-    // Old array handling code - keeping for reference but not using
-    if (Array.isArray(content) && false) {
-      return (
-        <div className="space-y-6">
-          {content.map((doc, index) => (
-            <div key={index} className="border border-gray-700/50 rounded-lg p-4 bg-gray-900/30">
-              <div className="flex items-center gap-3 mb-4">
-                <FileText className="w-5 h-5 text-blue-400" />
-                <h3 className="text-lg font-semibold text-white">{doc.title || `Document ${index + 1}`}</h3>
-              </div>
-              {doc.blocks && (
-                <div className="prose prose-invert max-w-none">
-                  {doc.blocks.map((block: any, blockIndex: number) => (
-                    <div key={blockIndex} className="mb-4">
-                      {block.type === 'heading_1' && (
-                        <h1 className="text-2xl font-bold text-white mb-2">{block.content}</h1>
-                      )}
-                      {block.type === 'heading_2' && (
-                        <h2 className="text-xl font-semibold text-white mb-2">{block.content}</h2>
-                      )}
-                      {block.type === 'heading_3' && (
-                        <h3 className="text-lg font-medium text-white mb-2">{block.content}</h3>
-                      )}
-                      {block.type === 'paragraph' && (
-                        <p className="text-gray-300 leading-relaxed mb-2">{block.content}</p>
-                      )}
-                      {block.type === 'bulletListItem' && (
-                        <ul className="list-disc list-inside text-gray-300 mb-2">
-                          <li>{block.content}</li>
-                        </ul>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      );
-    }
+  // Legacy array rendering block removed (was disabled)
 
     if (typeof content === 'object') {
       return (

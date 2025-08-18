@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Rocket, Code, Briefcase, Users, FileText, X, Plus, Clipboard } from 'lucide-react';
+import { Rocket, Code, Briefcase, Users, FileText, X, Plus } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
+import { CopyToClipboardButton } from '../ui/CopyToClipboardButton';
 
 export interface ProjectDoc {
   id: string;
@@ -24,7 +25,7 @@ export const DocumentCard: React.FC<DocumentCardProps> = ({
   isActive,
   onSelect,
   onDelete,
-  isDarkMode
+  isDarkMode: _isDarkMode
 }) => {
   const [showDelete, setShowDelete] = useState(false);
   const { showToast } = useToast();
@@ -49,18 +50,8 @@ export const DocumentCard: React.FC<DocumentCardProps> = ({
     }
   };
 
-  const handleCopyId = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    navigator.clipboard.writeText(document.id);
+  const handleCopied = () => {
     showToast('Document ID copied to clipboard', 'success');
-    
-    // Visual feedback
-    const button = e.currentTarget;
-    const originalHTML = button.innerHTML;
-    button.innerHTML = '<div class="flex items-center gap-1"><span class="w-3 h-3 text-green-500">✓</span><span class="text-green-500 text-xs">Copied</span></div>';
-    setTimeout(() => {
-      button.innerHTML = originalHTML;
-    }, 2000);
   };
   
   return (
@@ -98,13 +89,14 @@ export const DocumentCard: React.FC<DocumentCardProps> = ({
         <span className="text-xs text-gray-400 dark:text-gray-500 truncate max-w-[120px]" title={document.id}>
           {document.id.slice(0, 8)}...
         </span>
-        <button 
-          onClick={handleCopyId}
-          className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-          title="Copy Document ID to clipboard"
-        >
-          <Clipboard className="w-3 h-3" />
-        </button>
+        <CopyToClipboardButton
+          value={document.id}
+          onCopy={handleCopied}
+          className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 bg-transparent hover:bg-gray-100 dark:hover:bg-gray-700"
+          ariaLabel="Copy document ID"
+          small
+          showIcon
+        />
       </div>
       
       {/* Delete Button */}

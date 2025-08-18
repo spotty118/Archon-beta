@@ -162,7 +162,7 @@ class CredentialsService {
         }
         // Float fields
         else if (cred.key === 'CRAWL_DELAY_BEFORE_HTML') {
-          settings[cred.key] = parseFloat(cred.value || '0.5') || 0.5;
+          (settings as any)[cred.key] = parseFloat(cred.value || '0.5') || 0.5;
         }
         // Boolean fields
         else {
@@ -261,12 +261,12 @@ class CredentialsService {
         const key = cred.key as keyof CodeExtractionSettings;
         if (typeof settings[key] === 'number') {
           if (key === 'MAX_PROSE_RATIO') {
-            settings[key] = parseFloat(cred.value || '0.15');
+            (settings as any)[key] = parseFloat(cred.value || '0.15');
           } else {
-            settings[key] = parseInt(cred.value || settings[key].toString(), 10);
+            (settings as any)[key] = parseInt(cred.value || settings[key].toString(), 10);
           }
         } else if (typeof settings[key] === 'boolean') {
-          settings[key] = cred.value === 'true';
+          (settings as any)[key] = cred.value === 'true';
         }
       }
     });

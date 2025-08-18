@@ -8,8 +8,6 @@ import type { Task } from './TaskTableView';
 interface EditTaskModalProps {
   isModalOpen: boolean;
   editingTask: Task | null;
-  projectFeatures: any[];
-  isLoadingFeatures: boolean;
   isSavingTask: boolean;
   onClose: () => void;
   onSave: (task: Task) => Promise<void>;
@@ -23,8 +21,6 @@ const ASSIGNEE_OPTIONS = ['User', 'Archon', 'AI IDE Agent'] as const;
 export const EditTaskModal = memo(({
   isModalOpen,
   editingTask,
-  projectFeatures,
-  isLoadingFeatures,
   isSavingTask,
   onClose,
   onSave,
@@ -183,8 +179,8 @@ export const EditTaskModal = memo(({
                 <FeatureInput
                   value={localTask?.feature || ''}
                   onChange={handleFeatureChange}
-                  projectFeatures={projectFeatures}
-                  isLoadingFeatures={isLoadingFeatures}
+                  projectFeatures={[]}
+                  isLoadingFeatures={false}
                   placeholder="Type feature name"
                   className="w-full bg-white/50 dark:bg-black/70 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-white rounded-md py-2 px-3 pr-10 focus:outline-none focus:border-cyan-400 focus:shadow-[0_0_10px_rgba(34,211,238,0.2)] transition-all duration-300"
                 />
@@ -228,9 +224,9 @@ export const EditTaskModal = memo(({
     prevProps.editingTask?.assignee?.name === nextProps.editingTask?.assignee?.name &&
     prevProps.editingTask?.feature === nextProps.editingTask?.feature &&
     prevProps.editingTask?.task_order === nextProps.editingTask?.task_order &&
-    prevProps.isSavingTask === nextProps.isSavingTask &&
-    prevProps.isLoadingFeatures === nextProps.isLoadingFeatures &&
-    prevProps.projectFeatures === nextProps.projectFeatures // Reference equality check
+  prevProps.isSavingTask === nextProps.isSavingTask &&
+  prevProps.editingTask?.feature === nextProps.editingTask?.feature &&
+  prevProps.editingTask?.task_order === nextProps.editingTask?.task_order
   );
   
   if (!isEqual) {

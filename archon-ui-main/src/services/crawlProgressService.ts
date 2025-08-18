@@ -158,7 +158,7 @@ class CrawlProgressService {
       // Create a specific handler for this progressId
       const progressHandler = (message: any) => {
         console.log(`📨 [${progressId}] Raw message received:`, message);
-        const data = message.data || message;
+        const data = (message.data as any) || message;
         console.log(`📨 [${progressId}] Extracted data:`, data);
         console.log(`📨 [${progressId}] Data progressId: ${data.progressId}, Expected: ${progressId}`);
         
@@ -181,7 +181,7 @@ class CrawlProgressService {
       this.wsService.addMessageHandler('progress_update', progressHandler);
 
       this.wsService.addMessageHandler('crawl_complete', (message) => {
-        const data = message.data || message;
+        const data = (message.data as any) || message;
         console.log(`✅ Crawl completed for ${progressId}`);
         if (data.progressId === progressId) {
           onMessage({ ...data, completed: true });
@@ -190,11 +190,11 @@ class CrawlProgressService {
 
       this.wsService.addMessageHandler('crawl_error', (message) => {
         console.error(`❌ Crawl error for ${progressId}:`, message);
-        if (message.data?.progressId === progressId || message.progressId === progressId) {
+        if ((message.data as any)?.progressId === progressId || (message as any).progressId === progressId) {
           onMessage({ 
             progressId,
             status: 'error',
-            error: message.data?.message || message.error || 'Unknown error',
+            error: (message.data as any)?.message || (message as any).error || 'Unknown error',
             percentage: 0
           });
         }
@@ -202,24 +202,24 @@ class CrawlProgressService {
 
       // Add stop event handlers
       this.wsService.addMessageHandler('crawl:stopping', (message) => {
-        if (message.data?.progressId === progressId) {
+        if ((message.data as any)?.progressId === progressId) {
           onMessage({
             progressId,
             status: 'stopping',
-            percentage: message.data.percentage || 0,
-            log: message.data.message
+            percentage: (message.data as any).percentage || 0,
+            log: (message.data as any).message
           });
         }
       });
       
       this.wsService.addMessageHandler('crawl:stopped', (message) => {
-        if (message.data?.progressId === progressId) {
+        if ((message.data as any)?.progressId === progressId) {
           onMessage({
             progressId,
             status: 'cancelled',
             percentage: 100,
             completed: true,
-            log: message.data.message
+            log: (message.data as any).message
           });
           
           // Auto-cleanup after stop
