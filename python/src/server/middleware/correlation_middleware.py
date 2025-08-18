@@ -9,8 +9,7 @@ import time
 import uuid
 from typing import Callable, Optional
 from fastapi import Request, Response
-from fastapi.middleware.base import BaseHTTPMiddleware
-from starlette.middleware.base import RequestResponseEndpoint
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 from src.server.logging.structured_logger import (
     set_correlation_id,
